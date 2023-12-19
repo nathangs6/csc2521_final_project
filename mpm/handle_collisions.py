@@ -19,10 +19,11 @@ def compute_collision(p: np.array, v: np.array, body: Body) -> np.array:
         vrel = vt + mu*vn*vt/npl.norm(vt)
     return vrel + vco
 
-def handle_all_collisions(x: np.array, v: np.array, dt: float, bodies: np.array) -> np.array:
+def handle_all_collisions(x: np.array, v: np.array, dt: float, bodies: np.array, grid_masses=None) -> np.array:
     new_v = v
     for k in range(x.shape[0]):
-        for body in bodies:
-            if body.check_collision(x[k]):
-                new_v[k] = compute_collision(x[k], v[k], body)
+        if grid_masses is None or grid_masses[k] > 0:
+            for body in bodies:
+                if body.check_collision(x[k] + dt*v[k]):
+                    new_v[k] = compute_collision(x[k], v[k], body)
     return new_v

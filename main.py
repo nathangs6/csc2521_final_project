@@ -13,22 +13,24 @@ import matplotlib.animation as animation
 # Set Parameters
 save = False
 dt = 1e-4
+implicit=False
 step_per_frame = 30
-num_frames = 1300
+num_frames = 20
 radius = 0.05
 
 # Define MPM and Scene
-scene = Scene.TwoSnowBallCollide(h=0.1,dt=dt)
+scene = Scene.BallCrash(h=0.05,dt=dt)
 mpm = MPM(scene)
 mpm.init_animation(device="cpu")
 
 # Make data
 data = [mpm.get_position()]
+print("Number of particles: " + str(mpm.get_position().shape[0]))
 print("Generating data")
 for f in range(num_frames):
     print(f)
     for i in range(step_per_frame):
-        mpm.step()
+        mpm.step(implicit=implicit)
     data.append(mpm.get_position())
 
 # Setup Plot
@@ -38,6 +40,7 @@ ax.set_xlabel("X")
 ax.set_ylabel("Y")
 ax.set_xlim([scene.extents[0][0], scene.extents[0][1]])
 ax.set_ylim([scene.extents[1][0]-1.0, scene.extents[1][1]])
+ax.set_aspect('equal', 'box')
 ax.set_title("Snow")
 ax.set_facecolor("xkcd:navy")
 moon_radius = 1.0

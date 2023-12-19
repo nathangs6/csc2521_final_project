@@ -19,7 +19,7 @@ class Scene:
     grid: np.array
     bodies: np.array
 
-    def __init__(self, spacing, dt, extents, mass, position, velocity, bodies, theta_c=2.5e-2, theta_s=7.5e-3, hardening_coefficient=10, initial_density=4e2, initial_young_modulus=1e-1, poisson_ratio=0.2, alpha=0.95, density=4e2):
+    def __init__(self, spacing, dt, extents, mass, position, velocity, bodies, theta_c=2.5e-2, theta_s=7.5e-3, hardening_coefficient=10, initial_density=4e2, initial_young_modulus=1e5, poisson_ratio=0.2, alpha=0.95, density=1e2):
         self.theta_c = theta_c
         self.theta_s = theta_s
         self.hardening_coefficient = hardening_coefficient
@@ -77,70 +77,12 @@ class Scene:
         self.bodies=bodies
 
 
-class TestScene(Scene):
-    def __init__(self, h=0.5, dt=1e-5):
-        Scene.__init__(self,
-                       spacing=h,
-                       dt=dt,
-                       extents=np.array([[-1.0,1.0],[0.0,2.0]]),
-                       mass=np.array([1.0]),
-                       position=np.array([[0.0,1.5]]),
-                       velocity=np.array([[0.0,0.0]]),
-                       bodies = np.array([])
-                       )
-
-class FallingSnow(Scene):
-    def __init__(self, h=0.5, dt=1e-5):
-        n = 1000
-        X = 2 * np.random.rand(n) - 1.0
-        Y = np.random.rand(n) + 1.0
-        position = np.array(list(zip(X,Y)))
-        Scene.__init__(self,
-                       spacing=h,
-                       dt=dt,
-                       extents=np.array([[-1.0,1.0],[0.0,2.0]]),
-                       mass=np.ones(shape=position.shape[0], dtype=float),
-                       position=position,
-                       velocity=np.zeros_like(position, dtype=float),
-                       bodies = np.array([])
-                       )
-
-
-class BallDrop(Scene):
-    def __init__(self, h=0.1, dt=1e-3):
-        position = []
-        mass = []
-        num_points = 500
-        r_vals = np.random.uniform(0, 0.25, num_points)
-        t_vals = np.random.uniform(0.01, 2*np.pi-0.01, num_points)
-        for i in range(len(r_vals)):
-            position.append([r_vals[i]*np.cos(t_vals[i]),
-                             r_vals[i]*np.sin(t_vals[i]) + 1.0
-                             ])
-            mass.append(1.0)
-        position = np.array(position)
-        mass = np.array(mass)
-        velocity = np.zeros_like(position)
-        bodies=np.array([])
-        Scene.__init__(self,
-                       spacing=h,
-                       dt=dt,
-                       extents=np.array([[-1.0,1.0],[0.0,2.0]]),
-                       mass=mass,
-                       position=position,
-                       velocity=velocity,
-                       bodies=bodies)
-
 class BallCrash(Scene):
-    def __init__(self, h=0.1, dt=1e-3, density=2e3):
-        extents = np.array([[-1.0,1.0],[0.0,2.0]])
-        position = SnowShapes.make_snowball(0.25, np.array([0.0,1.5]), density)
-        mass = np.ones(position.shape[0], dtype=float)
-        velocity = np.zeros_like(position, dtype=float)
-        for i in range(velocity.shape[0]):
-            velocity[i][1] = -10.0
+    def __init__(self, h=0.1, dt=1e-3, density=1e2):
+        extents = np.array([[-3.0,3.0],[0.0,6.1]])
+        position, velocity, mass = SnowShapes.make_snowball(1.0, np.array([0.0,5.0]), np.array([0, -10.0]), 1.0, density)
         body = Box("box", mu=0.01, v=np.array([0.0,0.0]),
-                   c=np.array([[0.0,0.9],[0.2,0.3],[0.0,0.1],[-0.2,0.3]]))
+                   c=np.array([[0.0,3.0],[1.0,1.2],[0.0,1.0],[-1.0,1.2]]))
         bodies=np.array([body])
         Scene.__init__(self,
                        spacing=h,
@@ -151,24 +93,17 @@ class BallCrash(Scene):
                        position=position,
                        velocity=velocity,
                        bodies=bodies,
-                       theta_c=2.5e-1,
-                       theta_s=7.5e-2,
-                       poisson_ratio=0.9)
+                       initial_young_modulus=1e-1)
 
 
 class TwoSnowBallCollide(Scene):
     def __init__(self, h=1.0, dt=1e-3, density=1e2):
         extents = np.array([[-5.0, 5.0], [0.0,6.0]])
-        position1 = SnowShapes.make_snowball(1.0, np.array([-2.0, 2.5]), density)
-        velocity1 = np.zeros_like(position1, dtype=float)
-        for i in range(velocity1.shape[0]):
-            velocity1[i][0] = 20.0
-        position2 = SnowShapes.make_snowball(1.0, np.array([2.0, 3.5]), density)
-        velocity2 = -np.copy(velocity1)
+        position1, velocity1, mass1 = SnowShapes.make_snowball(1.0, np.array([-2.0, 2.5]), np.array([20.0,0.0]), 1.0, density)
+        position2, velocity2, mass2 = SnowShapes.make_snowball(1.0, np.array([-2.0, 2.5]), np.array([-20.0,0.0]), 1.0, density)
         position = np.concatenate((position1, position2), axis=0)
-        print(position.shape)
         velocity = np.concatenate((velocity1, velocity2), axis=0)
-        mass = np.ones(position.shape[0], dtype=float)
+        mass = np.concatenate((mass1, mass2), axis=0)
         bodies = np.array([])
         Scene.__init__(self,
                        spacing=h,

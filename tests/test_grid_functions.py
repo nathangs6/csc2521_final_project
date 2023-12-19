@@ -118,7 +118,7 @@ def test_dN_third_range():
 ### Test Grid Basis Functions ###
 #################################
 @wp.kernel
-def evaluate_gbf(xp: wp.array(dtype=wp.vec3), idx: wp.array(dtype=wp.vec3), h: float, outputs: wp.array(dtype=wp.float32)) -> None:
+def evaluate_gbf(xp: wp.array(dtype=wp.vec2), idx: wp.array(dtype=wp.vec2), h: float, outputs: wp.array(dtype=wp.float32)) -> None:
     i = wp.tid()
     outputs[i] = src.grid_basis_function(xp[i], idx[i], h)
 
@@ -126,27 +126,27 @@ def test_grid_basis_function():
     wp.init()
     h = 0.1
     test_xp = [
-        wp.vec3(0.0, 0.0, 0.0),
-        wp.vec3(1.0, 3.0, -2.0),
-        wp.vec3(0.1, 0.2, 0.3),
-        wp.vec3(0.4, -0.2, 0.35)
+        wp.vec2(0.0, 0.0),
+        wp.vec2(1.0, 3.0),
+        wp.vec2(0.1, 0.2),
+        wp.vec2(0.4, -0.2)
     ]
     test_idx = [
-        wp.vec3(0, 0, 0),
-        wp.vec3(2, 4, 1),
-        wp.vec3(1, 2, 3),
-        wp.vec3(4, -3, 3)
+        wp.vec2(0, 0),
+        wp.vec2(2, 4),
+        wp.vec2(1, 2),
+        wp.vec2(4, -3)
     ]
     m = len(test_xp)
-    test_xp = wp.array(test_xp, dtype=wp.vec3, device="cpu")
-    test_idx = wp.array(test_idx, dtype=wp.vec3, device="cpu")
+    test_xp = wp.array(test_xp, dtype=wp.vec2, device="cpu")
+    test_idx = wp.array(test_idx, dtype=wp.vec2, device="cpu")
     test_output = wp.zeros(m, dtype=wp.float32, device="cpu")
     wp.launch(kernel=evaluate_gbf,
               dim=m,
               inputs=[test_xp, test_idx, h, test_output],
               device="cpu")
     actual = np.array(test_output)
-    expected = [8/27, 0.0, 8/27, 23/432]
+    expected = [4/9, 0.0, 4/9, 1/9]
     for i in range(m):
         assert abs(actual[i] - expected[i]) <= TOL
 
@@ -154,7 +154,7 @@ def test_grid_basis_function():
 ### Test Grad of Grid Basis Function ###
 ########################################
 @wp.kernel
-def evaluate_ggbf(xp: wp.array(dtype=wp.vec3), idx: wp.array(dtype=wp.vec3), h: float, outputs: wp.array(dtype=wp.vec3)) -> None:
+def evaluate_ggbf(xp: wp.array(dtype=wp.vec2), idx: wp.array(dtype=wp.vec2), h: float, outputs: wp.array(dtype=wp.vec2)) -> None:
     i = wp.tid()
     outputs[i] = src.grad_grid_basis_function(xp[i], idx[i], h)
 
@@ -162,31 +162,31 @@ def test_grad_grid_basis_function():
     wp.init()
     h = 0.1
     test_xp = [
-        wp.vec3(0.0, 0.0, 0.0),
-        wp.vec3(1.0, 3.0, -2.0),
-        wp.vec3(0.1, 0.2, 0.3),
-        wp.vec3(0.4, -0.2, 0.35)
+        wp.vec2(0.0, 0.0),
+        wp.vec2(1.0, 3.0),
+        wp.vec2(0.1, 0.2),
+        wp.vec2(0.4, -0.2)
     ]
     test_idx = [
-        wp.vec3(0, 0, 0),
-        wp.vec3(2, 4, 1),
-        wp.vec3(1, 2, 3),
-        wp.vec3(4, -3, 3)
+        wp.vec2(0, 0),
+        wp.vec2(2, 4),
+        wp.vec2(1, 2),
+        wp.vec2(4, -3)
     ]
     m = len(test_xp)
-    test_xp = wp.array(test_xp, dtype=wp.vec3, device="cpu")
-    test_idx = wp.array(test_idx, dtype=wp.vec3, device="cpu")
-    test_output = wp.empty(shape=(m), dtype=wp.vec3, device="cpu")
+    test_xp = wp.array(test_xp, dtype=wp.vec2, device="cpu")
+    test_idx = wp.array(test_idx, dtype=wp.vec2, device="cpu")
+    test_output = wp.empty(shape=(m), dtype=wp.vec2, device="cpu")
     wp.launch(kernel=evaluate_ggbf,
               dim=m,
               inputs=[test_xp, test_idx, h, test_output],
               device="cpu")
     actual = np.array(test_output)
     expected = [
-        np.array([0,0,0], dtype=np.float32),
-        np.array([0,0,0], dtype=np.float32),
-        np.array([0,0,0], dtype=np.float32),
-        np.array([0,-115/72,-25/36], dtype=np.float32),
+        np.array([0,0], dtype=np.float32),
+        np.array([0,0], dtype=np.float32),
+        np.array([0,0], dtype=np.float32),
+        np.array([0,-10/3], dtype=np.float32),
     ]
     for i in range(m):
         print(i)
@@ -196,16 +196,16 @@ def test_construct_interpolation():
     wp.init()
     wip = wp.empty(shape=(3,4), dtype=float, device="cpu")
     np_indices = np.array([
-        [0,0,0],
-        [2,4,1],
-        [4,-3,3]], dtype=np.float32)
-    i = wp.from_numpy(np_indices, dtype=wp.vec3, device="cpu")
+        [0,0],
+        [2,4],
+        [4,-3]], dtype=np.float32)
+    i = wp.from_numpy(np_indices, dtype=wp.vec2, device="cpu")
     np_points = np.array([
-        [0,0,0],
-        [1,3,-2],
-        [0.1,0.2,0.3],
-        [0.4,-0.2,0.35]], dtype=np.float32)
-    p = wp.from_numpy(np_points, dtype=wp.vec3, device="cpu")
+        [0,0],
+        [1,3],
+        [0.1,0.2],
+        [0.4,-0.2]], dtype=np.float32)
+    p = wp.from_numpy(np_points, dtype=wp.vec2, device="cpu")
     h = 0.1
     wp.launch(kernel=src.construct_interpolation,
               dim=[3,4],
@@ -213,7 +213,7 @@ def test_construct_interpolation():
               device="cpu")
     actual = np.array(wip)
     expected = np.array([
-        [0.29629633, 0, 0, 0],
+        [4/9, 0, 0, 0],
         [0, 0, 0, 0],
-        [0, 0, 0, 0.05324073]], dtype=np.float32)
+        [0, 0, 0, 1/9]], dtype=np.float32)
     assert np.linalg.norm(actual - expected) <= TOL

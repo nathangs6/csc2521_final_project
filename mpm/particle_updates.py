@@ -2,6 +2,12 @@ import numpy as np
 import warp as wp
 
 @wp.kernel
+def array_determinant(J: wp.array(dtype=wp.float32),
+                      F: wp.array(dtype=wp.mat22)) -> None:
+    p = wp.tid()
+    J[p] = wp.determinant(F[p])
+
+@wp.kernel
 def update_particle_position(
     position: wp.array(dtype=wp.vec2),
     velocity: wp.array(dtype=wp.vec2),
@@ -56,25 +62,6 @@ def clamp_vec2(A: wp.vec2, lower: float, upper: float) -> wp.vec2:
     for i in range(2):
         result[i] = wp.clamp(A[i], lower, upper)
     return result
-
-@wp.func
-def svd2(A: wp.mat22, U: wp.mat22, S: wp.vec2, V: wp.mat22) -> None:
-    AAT     = A * wp.transpose(A)
-    ATA     = wp.transpose(A) * A
-    theta   = 0.5 * wp.atan2(AAT[0][1], AAT[0][0]-AAT[1][1])
-    U[0][0] = wp.cos(theta)
-    U[0][1] = -wp.sin(theta)
-    U[1][0] = wp.sin(theta)
-    U[1][1] = wp.cos(theta)
-    S[0]    = wp.sqrt(0.5*(AAT[0][0] + AAT[1][1] + wp.sqrt((AAT[0][0]-AAT[1][1])*(AAT[0][0]-AAT[1][1])+4.0*AAT[0][1])))
-    S[1]    = wp.sqrt(0.5*(AAT[0][0] + AAT[1][1] - wp.sqrt((AAT[0][0]-AAT[1][1])*(AAT[0][0]-AAT[1][1])+4.0*AAT[0][1])))
-    c0      = wp.sign(S[0])
-    c1      = wp.sign(S[1])
-    phi     = 0.5 * wp.atan2(ATA[0][1], ATA[0][0]-ATA[1][1])
-    V[0][0] = c0*wp.cos(phi)
-    V[0][1] = -c1*wp.sin(phi)
-    V[1][0] = c0*wp.sin(phi)
-    V[1][1] = c1*wp.cos(phi)
 
 @wp.kernel
 def update_particle_FE_FP(fe: wp.array(dtype=wp.mat22),
