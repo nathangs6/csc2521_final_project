@@ -61,14 +61,15 @@ def test_update_grid_velocities_with_ext_forces():
     old_v = wp.array([wp.vec2(1.0,0.0), wp.vec2(0.0,-2.0)], dtype=wp.vec2)
     mass = wp.array([1.0,2.0], dtype=wp.float32)
     ext_f = wp.array([wp.vec2(0.0,-10.0),wp.vec2(1.0,2.0)], dtype=wp.vec2)
+    gravity = wp.vec2(0.0,-10.0)
     dt = 0.1
     new_v = wp.empty_like(old_v)
     wp.launch(kernel=src.update_grid_velocities_with_ext_forces,
               dim=2,
-              inputs=[new_v, old_v, mass, ext_f, dt],
+              inputs=[new_v, old_v, mass, ext_f, gravity, dt],
               device = "cpu")
     actual = np.array(new_v)
-    expected = [[1.0,-1.0],[0.05,-1.9]]
+    expected = [[1.0,-2.0],[1/20,-29/10]]
     for i in range(len(expected)):
         assert np.linalg.norm(actual[i] - expected[i]) <= TOL
 

@@ -19,7 +19,7 @@ class Scene:
     grid: np.array
     bodies: np.array
 
-    def __init__(self, spacing, dt, extents, mass, position, velocity, bodies, theta_c=2.5e-2, theta_s=7.5e-3, hardening_coefficient=10, initial_density=4e2, initial_young_modulus=1e5, poisson_ratio=0.2, alpha=0.95, density=1e2):
+    def __init__(self, spacing, dt, extents, mass, position, velocity, bodies, theta_c=2.5e-2, theta_s=7.5e-3, hardening_coefficient=10.0, initial_density=1e2, initial_young_modulus=1e5, poisson_ratio=0.2, alpha=0.95, density=1e2):
         self.theta_c = theta_c
         self.theta_s = theta_s
         self.hardening_coefficient = hardening_coefficient
@@ -77,12 +77,32 @@ class Scene:
         self.bodies=bodies
 
 
+class BallDrop(Scene):
+    def __init__(self, h=0.05, dt=1e-4, density=1e2):
+        extents = np.array([[-1.5,1.5],[0.0,2.0]])
+        position, velocity, mass = SnowShapes.make_snowball(0.5, np.array([0.0,1.2]), np.array([0, -80.0]), 0.05, density)
+        bodies=np.array([])
+        Scene.__init__(self,
+                       spacing=h,
+                       dt=dt,
+                       density=density,
+                       extents=extents,
+                       mass=mass,
+                       position=position,
+                       velocity=velocity,
+                       bodies=bodies,
+                       initial_young_modulus=1.5e5,
+                       hardening_coefficient=10.0,
+                       theta_c=1.9e-2,
+                       theta_s=7.5e-2)
+
+
 class BallCrash(Scene):
     def __init__(self, h=0.1, dt=1e-3, density=1e2):
-        extents = np.array([[-3.0,3.0],[0.0,6.1]])
-        position, velocity, mass = SnowShapes.make_snowball(1.0, np.array([0.0,5.0]), np.array([0, -10.0]), 1.0, density)
+        extents = np.array([[-2.0,2.0],[0.0,4.1]])
+        position, velocity, mass = SnowShapes.make_snowball(0.5, np.array([0.0,3.0]), np.array([0, -40.0]), 0.1, density)
         body = Box("box", mu=0.01, v=np.array([0.0,0.0]),
-                   c=np.array([[0.0,3.0],[1.0,1.2],[0.0,1.0],[-1.0,1.2]]))
+                   c=np.array([[0.0,2.0],[0.75,1.25],[0.0,0.5],[-0.75,1.25]]))
         bodies=np.array([body])
         Scene.__init__(self,
                        spacing=h,
@@ -93,7 +113,7 @@ class BallCrash(Scene):
                        position=position,
                        velocity=velocity,
                        bodies=bodies,
-                       initial_young_modulus=1e-1)
+                       initial_young_modulus=1.5e5)
 
 
 class TwoSnowBallCollide(Scene):

@@ -9,17 +9,18 @@ import Scene
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import time
 
 # Set Parameters
 save = False
-dt = 1e-4
+dt = 1e-5
 implicit=False
 step_per_frame = 30
-num_frames = 20
+num_frames = 100
 radius = 0.05
 
 # Define MPM and Scene
-scene = Scene.BallCrash(h=0.05,dt=dt)
+scene = Scene.BallDrop(h=0.1,dt=dt)
 mpm = MPM(scene)
 mpm.init_animation(device="cpu")
 
@@ -28,10 +29,11 @@ data = [mpm.get_position()]
 print("Number of particles: " + str(mpm.get_position().shape[0]))
 print("Generating data")
 for f in range(num_frames):
-    print(f)
+    start = time.time()
     for i in range(step_per_frame):
         mpm.step(implicit=implicit)
     data.append(mpm.get_position())
+    print("Frame " + str(f) + " took " + str(round(time.time() - start,2)) + " seconds to run")
 
 # Setup Plot
 plt.figure()
