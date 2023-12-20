@@ -56,7 +56,9 @@ class MPM:
             "FE": np.zeros(shape=(self.num_p,2,2), dtype=np.float32),
             "JE": np.ones(shape=self.num_p, dtype=np.float32),
             "FP": np.zeros(shape=(self.num_p,2,2), dtype=np.float32),
-            "JP": np.ones(shape=self.num_p, dtype=np.float32)
+            "JP": np.ones(shape=self.num_p, dtype=np.float32),
+            "mu": np.empty(shape=self.num_p, dtype=np.float32),
+            "lam": np.empty(shape=self.num_p, dtype=np.float32)
         }
         for i in range(self.num_p):
             self.pp["F"][i] = np.eye(2, dtype=float)
@@ -97,6 +99,8 @@ class MPM:
         self.pp["JE"] = wp.array(self.pp["JE"], dtype=wp.float32, device=device)
         self.pp["FP"] = wp.array(self.pp["FP"], dtype=wp.mat22, device=device)
         self.pp["JP"] = wp.array(self.pp["JP"], dtype=wp.float32, device=device)
+        self.pp["mu"] = wp.array(self.pp["mu"], dtype=wp.float32, device=device)
+        self.pp["lam"] = wp.array(self.pp["lam"], dtype=wp.float32, device=device)
         # Move grid properties
         self.gp["position"] = wp.array(self.gp["position"], dtype=wp.vec2, device=device)
         self.gp["velocity"] = wp.array(self.gp["velocity"], dtype=wp.vec2, device=device)
@@ -178,15 +182,16 @@ class MPM:
                   device=device)
         ## Compute stresses
         stresses = wp.zeros_like(self.pp["F"], device=device)
-        wp.launch(kernel=particle_updates.get_stresses,
+        wp.launch(kernel=particle_updates.construct_lame,
                   dim=self.num_p,
-                  inputs=[stresses, fe_shifted, je_shifted, self.pp["FP"], self.pp["JP"], self.p["mu0"], self.p["lam0"], self.p["zeta"]],
+                  inputs=[self.pp["mu"], self.pp["lam"], self.pp["JP"], self.p["mu0"], self.p["lam0"], self.p["zeta"]],
                   device=device)
+        particle_updates.get_stresses(stresses, fe_shifted, je_shifted, self.pp["FP"], self.pp["JP"], self.pp["mu"], self.pp["lam"])
         ## Compute grid forces
         grid_forces = wp.zeros_like(self.gp["velocity"], device=device)
         wp.launch(kernel=grid_updates.compute_grid_forces,
                   dim=self.num_g,
-                  inputs=[grid_forces, self.pp["volume"], self.interp["gwip"], stresses, self.gp["mass"]],
+                  inputs=[grid_forces, self.pp["volume"], self.interp["gwip"], stresses, mass_check],
                   device=device)
         #print("Step 3 took " + str(time.time() - start) + " to run")
 

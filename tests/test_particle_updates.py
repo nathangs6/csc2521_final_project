@@ -137,14 +137,10 @@ def test_get_stresses():
     FP = wp.array([wp.mat22(3.0,0.0,
                             0.0,1.0)], dtype=wp.mat22)
     JP = wp.array([3.0], dtype=wp.float32)
-    mu0 = 1.0
-    lam0 = 1.0
-    zeta = 1.0
+    mu = wp.array([1.0*np.exp(1.0 - 3.0)], dtype=wp.float32)
+    lam = wp.array([1.0*np.exp(1.0 - 3.0)], dtype=wp.float32)
     stress = wp.empty_like(FE)
-    wp.launch(kernel=src.get_stresses,
-              dim=1,
-              inputs=[stress, FE, JE, FP, JP, mu0, lam0, zeta],
-              device="cpu")
+    src.get_stresses(stress, FE, JE, FP, JP, mu, lam)
     actual = np.array(stress)
     expected = 2*np.exp(-2) * np.array([[3,0],[0,1]])
     assert np.linalg.norm(actual - expected) <= TOL

@@ -18,13 +18,13 @@ def compute_grid_forces(
     volume:         wp.array(dtype=wp.float32),
     grad_wip:       wp.array(dtype=wp.vec2, ndim=2),
     stress:         wp.array(dtype=wp.mat22),
-    mass:           wp.array(dtype=wp.float32)
+    check:          wp.array(dtype=wp.int8)
 ):
     """
     Compute the grid forces.
     """
     i = wp.tid()
-    if mass[i] > 0:
+    if check[i] > 0:
         grid_forces[i] = -1.0 * sum_stresses(volume, stress, grad_wip[i])
 
 @wp.kernel

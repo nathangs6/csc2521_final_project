@@ -102,37 +102,51 @@ def update_deformations(fe: wp.array(dtype=wp.mat22),
 def lame_parameter(c: float, zeta: float, JP: float):
     return c * wp.exp(zeta * (1.0 - JP))
 
-@wp.func
-def compute_stress(FE: wp.mat22, JE: wp.float32, FP: wp.mat22, JP: wp.float32, mu0: float, lam0: float, zeta: float) -> wp.mat22:
-    mu      = lame_parameter(mu0, zeta, JP)
-    lam     = lame_parameter(lam0, zeta, JP)
-    AAT     = wp.mul(FE, wp.transpose(FE))
-    theta   = 0.5 * wp.atan2(AAT[0,1] + AAT[1,0], AAT[0,0]-AAT[1,1])
-    cos_theta = wp.cos(theta)
-    sin_theta = wp.sin(theta)
-    U = wp.mat22(cos_theta,
-                 -sin_theta,
-                 sin_theta,
-                 cos_theta)
-    ATA     = wp.mul(wp.transpose(FE), FE)
-    phi     = 0.5 * wp.atan2(ATA[0,1] + ATA[1,0], ATA[0,0]-ATA[1,1])
-    cos_phi = wp.cos(phi)
-    sin_phi = wp.sin(phi)
-    V = wp.mat22(cos_phi, -sin_phi, sin_phi, cos_phi)
-    C = wp.mul(wp.transpose(U), wp.mul(FE, V))
-    C = wp.mat22(wp.sign(C[0,0]),0.0,0.0,wp.sign(C[1,1]), dtype=wp.float32)
-    V = wp.mul(V, C)
-    RE      = wp.mul(U, wp.transpose(V))
-    return 2.0*mu*wp.mul(FE-RE, wp.transpose(FE)) + lam*(JE-1.0)*JE*wp.identity(n=2, dtype=wp.float32)
+@wp.kernel
+def construct_lame(mu: wp.array(dtype=wp.float32),
+                   lam: wp.array(dtype=wp.float32),
+                   JP: wp.array(dtype=wp.float32),
+                   mu0: float,
+                   lam0: float,
+                   zeta: float) -> None:
+    p = wp.tid()
+    x = wp.exp(zeta * (1.0 - JP[p]))
+    mu[p] = mu0 * x
+    lam[p] = lam0 * x
 
 @wp.kernel
+def construct_stress(stress: wp.array(dtype=wp.mat22),
+                     FE: wp.array(dtype=wp.mat22),
+                     JE: wp.array(dtype=wp.float32),
+                     RE: wp.array(dtype=wp.mat22),
+                     mu: wp.array(dtype=wp.float32),
+                     lam: wp.array(dtype=wp.float32)) -> None:
+    p = wp.tid()
+    stress[p] = 2.0*mu[p]*wp.mul(FE[p]-RE[p], wp.transpose(FE[p])) + lam[p]*(JE[p]-1.0)*JE[p]*wp.identity(n=2, dtype=wp.float32)
+
+
+
 def get_stresses(stress: wp.array(dtype=wp.mat22),
-                 FE: wp.array(dtype=wp.mat22),
+                 FEH: wp.array(dtype=wp.mat22),
                  JE: wp.array(dtype=wp.float32),
                  FP: wp.array(dtype=wp.mat22),
                  JP: wp.array(dtype=wp.float32),
-                 mu0: float,
-                 lam0: float,
-                 zeta: float) -> None:
-    p = wp.tid()
-    stress[p] = compute_stress(FE[p], JE[p], FP[p], JP[p], mu0, lam0, zeta)
+                 mu: wp.array(dtype=wp.float32),
+                 lam: wp.array(dtype=wp.float32),
+                 device="cpu") -> None:
+    num_p = FEH.shape[0]
+    U = wp.empty_like(FEH)
+    s = wp.empty(shape=num_p, dtype=wp.vec2, device=device)
+    V = wp.empty_like(FEH)
+    wp.launch(kernel=linalg.array_svd2,
+              dim=num_p,
+              inputs=[FEH,U,s,V],
+              device=device)
+    wp.launch(kernel=linalg.array_polar_from_svd,
+              dim=num_p,
+              inputs=[U, U, V],
+              device=device)
+    wp.launch(kernel=construct_stress,
+              dim=num_p,
+              inputs=[stress, FEH, JE, U, mu, lam],
+              device=device)

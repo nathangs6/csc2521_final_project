@@ -112,6 +112,13 @@ def array_svd2(A: wp.array(dtype=wp.mat22),
     V[i] = result.V
 
 @wp.kernel
+def array_polar_from_svd(RE: wp.array(dtype=wp.mat22),
+                         U: wp.array(dtype=wp.mat22),
+                         V: wp.array(dtype=wp.mat22)) -> None:
+    p = wp.tid()
+    RE[p] = wp.mul(U[p], wp.transpose(V[p]))
+
+@wp.kernel
 def is_positive_1d(output: wp.array(dtype=wp.int8),
                    data: wp.array(dtype=wp.float32)) -> None:
     """

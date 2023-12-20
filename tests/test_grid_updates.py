@@ -14,7 +14,7 @@ def test_compute_grid_forces():
     grad_wip = wp.array([[wp.vec2(1.0,2.0), wp.vec2(0.0,1.0)]], dtype=wp.vec2)
     stress = wp.array([wp.mat22(1.0,0.0,0.0,1.0),
                        wp.mat22(2.0,0.0,0.0,2.0)], dtype=wp.mat22)
-    mass = wp.array([1.0, 1.0], dtype=wp.float32)
+    mass = wp.array([1, 1], dtype=wp.int8)
     grid_forces = wp.empty(shape=1, dtype=wp.vec2)
     wp.launch(kernel=src.compute_grid_forces,
               dim=1,
