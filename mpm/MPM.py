@@ -4,6 +4,7 @@ import warp as wp
 # Import source
 from Scene import Scene
 from Body import Plane
+import linalg
 import init_properties
 import rasterize
 import particle_updates
@@ -130,6 +131,18 @@ class MPM:
                   dim=self.num_g,
                   inputs=[self.pp["mass"], self.pp["velocity"], self.interp["wip"], self.gp["mass"], self.gp["velocity"]],
                   device=device)
+        ## Make checks
+        mass_check = wp.empty(shape=self.num_g, dtype=wp.int8, device=device)
+        wp.launch(kernel=linalg.is_positive_1d,
+                  dim=self.num_g,
+                  inputs=[mass_check, self.gp["mass"]],
+                  device=device)
+        print("WIP")
+        wip_check = wp.empty(shape=(self.num_g, self.num_p), dtype=wp.int8, device=device)
+        wp.launch(kernel=linalg.is_positive_2d,
+                  dim=[self.num_g, self.num_p],
+                  inputs=[wip_check, self.interp["wip"]],
+                  device=device)
         #print("Step 1 took " + str(time.time() - start) + " to run")
 
         # Step 2: compute particle volumes and densities
@@ -150,11 +163,12 @@ class MPM:
             #print("Step 2 took " + str(time.time() - start) + " to run")
 
         # Step 3: compute grid forces
+        print("Step 3")
         #start = time.time()
         ## Compute shifted elastic deformation
         wp.launch(kernel=particle_updates.update_grad_velocity,
                   dim=self.num_p,
-                  inputs=[self.pp["grad_velocity"], self.gp["velocity"], self.interp["gwip"].transpose(), self.gp["mass"]],
+                  inputs=[self.pp["grad_velocity"], self.gp["velocity"], self.interp["gwip"].transpose(), wip_check],
                   device=device)
         fe_shifted = wp.zeros_like(self.pp["FE"], device=device)
         wp.launch(kernel=particle_updates.shift_fe,
@@ -162,7 +176,7 @@ class MPM:
                   inputs=[fe_shifted, self.pp["FE"], self.pp["grad_velocity"], self.p["dt"], self.gp["mass"]],
                   device=device)
         je_shifted = wp.zeros_like(self.pp["JE"], device=device)
-        wp.launch(kernel=particle_updates.array_determinant,
+        wp.launch(kernel=linalg.array_determinant,
                   dim=self.num_p,
                   inputs=[je_shifted, fe_shifted],
                   device=device)
@@ -181,6 +195,7 @@ class MPM:
         #print("Step 3 took " + str(time.time() - start) + " to run")
 
         # Step 4: update velocities on grid
+        print("Step 4")
         #start = time.time()
         vg_temp = wp.zeros_like(self.gp["velocity"])
         wp.launch(kernel=grid_updates.update_grid_velocities_with_ext_forces,
@@ -238,11 +253,11 @@ class MPM:
                   inputs=[self.pp["FE"], self.pp["FP"], self.pp["F"], self.pp["grad_velocity"], self.p["dt"], self.p["lb"], self.p["ub"]],
                   device=device)
         ## Update determinants
-        wp.launch(kernel=particle_updates.array_determinant,
+        wp.launch(kernel=linalg.array_determinant,
                   dim=self.num_p,
                   inputs=[self.pp["JE"], self.pp["FE"]],
                   device=device)
-        wp.launch(kernel=particle_updates.array_determinant,
+        wp.launch(kernel=linalg.array_determinant,
                   dim=self.num_p,
                   inputs=[self.pp["JP"], self.pp["FP"]],
                   device=device)

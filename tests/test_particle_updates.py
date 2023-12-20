@@ -58,14 +58,8 @@ def test_update_particle_velocity():
     wpi = wp.array(wpi, dtype=wp.float32, device="cpu")
     vW = wp.zeros_like(vp)
     new_vW = wp.zeros_like(vW)
-    wp.launch(kernel=src.compute_vW,
-              dim=1,
-              inputs=[vW, old_vg, wpi],
-              device="cpu")
-    wp.launch(kernel=src.compute_vW,
-              dim=1,
-              inputs=[new_vW, new_vg, wpi],
-              device="cpu")
+    src.compute_vW(vW, old_vg, wpi)
+    src.compute_vW(new_vW, new_vg, wpi)
     wp.launch(kernel=src.update_particle_velocity,
               dim=2,
               inputs=[vp, new_vW, vW, a],
@@ -86,11 +80,8 @@ def test_update_particle_F():
     gv = wp.zeros(shape=2, dtype=wp.mat22, device="cpu")
     dt = 0.1
     f = wp.array(f, dtype=wp.mat22, device="cpu")
-    mass = wp.array([1.0], dtype=wp.float32, device="cpu")
-    wp.launch(kernel=src.update_grad_velocity,
-              dim=2,
-              inputs=[gv, new_vi, grad_wpi, mass],
-              device="cpu")
+    mass_check = wp.array([[1],[1]], dtype=wp.int8, ndim=2, device="cpu")
+    src.update_grad_velocity(gv, new_vi, grad_wpi, mass_check)
     wp.launch(kernel=src.update_particle_F,
               dim=2,
               inputs=[f, gv, dt],
@@ -118,11 +109,10 @@ def test_update_particle_FE_FP():
     dt = 0.0 # for simple SVD
     theta_c = 0.1
     theta_s = 0.2
-    mass = wp.array([1.0, 1.0, 1.0], dtype=wp.float32, device="cpu")
-    wp.launch(kernel=src.update_grad_velocity,
-              dim=2,
-              inputs=[gv, new_vi, grad_wpi, mass],
-              device="cpu")
+    mass_check = wp.array([[1,1],
+                           [1,1],
+                           [1,1]], dtype=wp.int8, ndim=2, device="cpu")
+    src.update_grad_velocity(gv, new_vi, grad_wpi, mass_check)
     wp.launch(kernel=src.update_particle_FE_FP,
               dim=2,
               inputs=[FE, FP, F, gv, dt, 1.0-theta_c, 1.0+theta_s],
