@@ -165,10 +165,11 @@ class MPM:
         #start = time.time()
         ## Compute shifted elastic deformation
         particle_updates.update_grad_velocity(self.pp["grad_velocity"], self.gp["velocity"], self.interp["gwip"].transpose(), wip_check.transpose())
-        fe_shifted = wp.zeros_like(self.pp["FE"], device=device)
-        wp.launch(kernel=particle_updates.shift_fe,
+        fe_shifted = wp.zeros_like(self.pp["FE"])
+        wp.copy(fe_shifted, self.pp["FE"])
+        wp.launch(kernel=particle_updates.shift_deformation,
                   dim=self.num_p,
-                  inputs=[fe_shifted, self.pp["FE"], self.pp["grad_velocity"], self.p["dt"]],
+                  inputs=[fe_shifted, self.pp["grad_velocity"], self.p["dt"]],
                   device=device)
         je_shifted = wp.zeros_like(self.pp["JE"], device=device)
         wp.launch(kernel=linalg.array_determinant,
@@ -177,7 +178,7 @@ class MPM:
                   device=device)
         ## Compute stresses
         stresses = wp.zeros_like(self.pp["F"], device=device)
-        wp.launch(kernel=grid_updates.get_stresses,
+        wp.launch(kernel=particle_updates.get_stresses,
                   dim=self.num_p,
                   inputs=[stresses, fe_shifted, je_shifted, self.pp["FP"], self.pp["JP"], self.p["mu0"], self.p["lam0"], self.p["zeta"]],
                   device=device)

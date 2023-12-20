@@ -129,3 +129,23 @@ def test_update_deformations():
     for i in range(len(expected)):
         assert np.linalg.norm(actual[i] - expected[i]) <= TOL
 
+def test_get_stresses():
+    wp.init()
+    FE = wp.array([wp.mat22(2.0,0.0,
+                            0.0,1.0)], dtype=wp.mat22)
+    JE = wp.array([2.0], dtype=wp.float32)
+    FP = wp.array([wp.mat22(3.0,0.0,
+                            0.0,1.0)], dtype=wp.mat22)
+    JP = wp.array([3.0], dtype=wp.float32)
+    mu0 = 1.0
+    lam0 = 1.0
+    zeta = 1.0
+    stress = wp.empty_like(FE)
+    wp.launch(kernel=src.get_stresses,
+              dim=1,
+              inputs=[stress, FE, JE, FP, JP, mu0, lam0, zeta],
+              device="cpu")
+    actual = np.array(stress)
+    expected = 2*np.exp(-2) * np.array([[3,0],[0,1]])
+    assert np.linalg.norm(actual - expected) <= TOL
+

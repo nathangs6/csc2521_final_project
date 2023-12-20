@@ -44,21 +44,6 @@ def update_grad_velocity(gv: wp.array(dtype=wp.mat22),
               device="cpu")
 
 @wp.kernel
-def shift_fe(fe_shifted: wp.array(dtype=wp.mat22),
-             fe: wp.array(dtype=wp.mat22),
-             gv: wp.array(dtype=wp.mat22),
-             dt: float) -> None:
-    p = wp.tid()
-    fe_shifted[p] = fe[p] + dt * wp.mul(gv[p], fe[p])
-
-@wp.kernel
-def update_particle_F(f: wp.array(dtype=wp.mat22),
-                      gv: wp.array(dtype=wp.mat22),
-                      dt: float) -> None:
-    p = wp.tid()
-    f[p] = f[p] + dt * wp.mul(gv[p], f[p])
-
-@wp.kernel
 def shift_deformation(f: wp.array(dtype=wp.mat22),
                       gv: wp.array(dtype=wp.mat22),
                       dt: float) -> None:
@@ -112,3 +97,42 @@ def update_deformations(fe: wp.array(dtype=wp.mat22),
               dim=num_p,
               inputs=[fe, fp, f, U, s, V],
               device=device)
+
+@wp.func
+def lame_parameter(c: float, zeta: float, JP: float):
+    return c * wp.exp(zeta * (1.0 - JP))
+
+@wp.func
+def compute_stress(FE: wp.mat22, JE: wp.float32, FP: wp.mat22, JP: wp.float32, mu0: float, lam0: float, zeta: float) -> wp.mat22:
+    mu      = lame_parameter(mu0, zeta, JP)
+    lam     = lame_parameter(lam0, zeta, JP)
+    AAT     = wp.mul(FE, wp.transpose(FE))
+    theta   = 0.5 * wp.atan2(AAT[0,1] + AAT[1,0], AAT[0,0]-AAT[1,1])
+    cos_theta = wp.cos(theta)
+    sin_theta = wp.sin(theta)
+    U = wp.mat22(cos_theta,
+                 -sin_theta,
+                 sin_theta,
+                 cos_theta)
+    ATA     = wp.mul(wp.transpose(FE), FE)
+    phi     = 0.5 * wp.atan2(ATA[0,1] + ATA[1,0], ATA[0,0]-ATA[1,1])
+    cos_phi = wp.cos(phi)
+    sin_phi = wp.sin(phi)
+    V = wp.mat22(cos_phi, -sin_phi, sin_phi, cos_phi)
+    C = wp.mul(wp.transpose(U), wp.mul(FE, V))
+    C = wp.mat22(wp.sign(C[0,0]),0.0,0.0,wp.sign(C[1,1]), dtype=wp.float32)
+    V = wp.mul(V, C)
+    RE      = wp.mul(U, wp.transpose(V))
+    return 2.0*mu*wp.mul(FE-RE, wp.transpose(FE)) + lam*(JE-1.0)*JE*wp.identity(n=2, dtype=wp.float32)
+
+@wp.kernel
+def get_stresses(stress: wp.array(dtype=wp.mat22),
+                 FE: wp.array(dtype=wp.mat22),
+                 JE: wp.array(dtype=wp.float32),
+                 FP: wp.array(dtype=wp.mat22),
+                 JP: wp.array(dtype=wp.float32),
+                 mu0: float,
+                 lam0: float,
+                 zeta: float) -> None:
+    p = wp.tid()
+    stress[p] = compute_stress(FE[p], JE[p], FP[p], JP[p], mu0, lam0, zeta)
