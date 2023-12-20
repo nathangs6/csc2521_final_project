@@ -80,7 +80,7 @@ class Scene:
 class BallDrop(Scene):
     def __init__(self, h=0.05, dt=1e-4, density=1e2):
         extents = np.array([[-1.5,1.5],[0.0,2.0]])
-        position, velocity, mass = SnowShapes.make_snowball(0.5, np.array([0.0,1.2]), np.array([0, -80.0]), 0.05, density)
+        position, velocity, mass = SnowShapes.make_snowball(0.25, np.array([0.0,1.2]), np.array([0, -80.0]), 0.01, density)
         bodies=np.array([])
         Scene.__init__(self,
                        spacing=h,
@@ -91,10 +91,7 @@ class BallDrop(Scene):
                        position=position,
                        velocity=velocity,
                        bodies=bodies,
-                       initial_young_modulus=1.5e5,
-                       hardening_coefficient=10.0,
-                       theta_c=1.9e-2,
-                       theta_s=7.5e-2)
+                       initial_young_modulus=1.5e5)
 
 
 class BallCrash(Scene):

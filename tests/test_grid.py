@@ -3,7 +3,7 @@ import sys
 test_directory = os.path.dirname(__file__)
 src_dir = os.path.join(test_directory, '..', 'mpm')
 sys.path.append(src_dir)
-import grid_updates as src
+import grid as src
 import warp as wp
 import numpy as np
 TOL = 0.00001
