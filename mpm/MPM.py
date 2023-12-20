@@ -137,7 +137,6 @@ class MPM:
                   dim=self.num_g,
                   inputs=[mass_check, self.gp["mass"]],
                   device=device)
-        print("WIP")
         wip_check = wp.empty(shape=(self.num_g, self.num_p), dtype=wp.int8, device=device)
         wp.launch(kernel=linalg.is_positive_2d,
                   dim=[self.num_g, self.num_p],
@@ -163,17 +162,13 @@ class MPM:
             #print("Step 2 took " + str(time.time() - start) + " to run")
 
         # Step 3: compute grid forces
-        print("Step 3")
         #start = time.time()
         ## Compute shifted elastic deformation
-        wp.launch(kernel=particle_updates.update_grad_velocity,
-                  dim=self.num_p,
-                  inputs=[self.pp["grad_velocity"], self.gp["velocity"], self.interp["gwip"].transpose(), wip_check],
-                  device=device)
+        particle_updates.update_grad_velocity(self.pp["grad_velocity"], self.gp["velocity"], self.interp["gwip"].transpose(), wip_check.transpose())
         fe_shifted = wp.zeros_like(self.pp["FE"], device=device)
         wp.launch(kernel=particle_updates.shift_fe,
                   dim=self.num_p,
-                  inputs=[fe_shifted, self.pp["FE"], self.pp["grad_velocity"], self.p["dt"], self.gp["mass"]],
+                  inputs=[fe_shifted, self.pp["FE"], self.pp["grad_velocity"], self.p["dt"]],
                   device=device)
         je_shifted = wp.zeros_like(self.pp["JE"], device=device)
         wp.launch(kernel=linalg.array_determinant,
@@ -195,7 +190,6 @@ class MPM:
         #print("Step 3 took " + str(time.time() - start) + " to run")
 
         # Step 4: update velocities on grid
-        print("Step 4")
         #start = time.time()
         vg_temp = wp.zeros_like(self.gp["velocity"])
         wp.launch(kernel=grid_updates.update_grid_velocities_with_ext_forces,
@@ -240,18 +234,15 @@ class MPM:
         # Step 7: update deformation gradient
         #start = time.time()
         ## Update matrices
-        wp.launch(kernel=particle_updates.update_grad_velocity,
-                  dim=self.num_p,
-                  inputs=[self.pp["grad_velocity"], new_vg, self.interp["gwip"].transpose(), self.gp["mass"]],
-                  device=device)
-        wp.launch(kernel=particle_updates.update_particle_F,
-                  dim=self.num_p,
-                  inputs=[self.pp["F"], self.pp["grad_velocity"], self.p["dt"]],
-                  device=device)
-        wp.launch(kernel=particle_updates.update_particle_FE_FP,
-                  dim=self.num_p,
-                  inputs=[self.pp["FE"], self.pp["FP"], self.pp["F"], self.pp["grad_velocity"], self.p["dt"], self.p["lb"], self.p["ub"]],
-                  device=device)
+        particle_updates.update_grad_velocity(self.pp["grad_velocity"], new_vg, self.interp["gwip"].transpose(), wip_check.transpose())
+        particle_updates.update_deformations(self.pp["FE"],
+                                             self.pp["FP"],
+                                             self.pp["F"],
+                                             self.pp["grad_velocity"],
+                                             self.p["dt"],
+                                             self.p["lb"],
+                                             self.p["ub"],
+                                             device=device)
         ## Update determinants
         wp.launch(kernel=linalg.array_determinant,
                   dim=self.num_p,
@@ -267,15 +258,9 @@ class MPM:
         # Step 8: update particle velocities
         #start = time.time()
         if self.frame == 0:
-            wp.launch(kernel=particle_updates.compute_vW,
-                      dim=self.num_p,
-                      inputs=[self.pp["viWi"], self.gp["velocity"], self.interp["wip"].transpose()],
-                      device=device)
+            particle_updates.compute_vW(self.pp["viWi"], self.gp["velocity"], self.interp["wip"].transpose())
         new_viWi = wp.zeros_like(self.pp["viWi"])
-        wp.launch(kernel=particle_updates.compute_vW,
-                  dim=self.num_p,
-                  inputs=[new_viWi, new_vg, self.interp["wip"].transpose()],
-                  device=device)
+        particle_updates.compute_vW(new_viWi, new_vg, self.interp["wip"].transpose())
         wp.launch(kernel=particle_updates.update_particle_velocity,
                   dim=self.num_p,
                   inputs=[self.pp["velocity"], new_viWi, self.pp["viWi"], self.p["alpha"]],

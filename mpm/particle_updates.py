@@ -58,42 +58,57 @@ def update_particle_F(f: wp.array(dtype=wp.mat22),
     p = wp.tid()
     f[p] = f[p] + dt * wp.mul(gv[p], f[p])
 
+@wp.kernel
+def shift_deformation(f: wp.array(dtype=wp.mat22),
+                      gv: wp.array(dtype=wp.mat22),
+                      dt: float) -> None:
+    p = wp.tid()
+    f[p] = f[p] + dt * wp.mul(gv[p], f[p])
 
 @wp.kernel
-def update_particle_FE_FP(fe: wp.array(dtype=wp.mat22),
-                          fp: wp.array(dtype=wp.mat22),
-                          f: wp.array(dtype=wp.mat22),
-                          gv: wp.array(dtype=wp.mat22),
-                          dt: float,
-                          lower_bound: float,
-                          upper_bound: float) -> None:
+def construct_deformations(fe: wp.array(dtype=wp.mat22),
+                           fp: wp.array(dtype=wp.mat22),
+                           f: wp.array(dtype=wp.mat22),
+                           U: wp.array(dtype=wp.mat22),
+                           s: wp.array(dtype=wp.vec2),
+                           V: wp.array(dtype=wp.mat22)) -> None:
     p = wp.tid()
-    fe_p = fe[p]
-    f_p = f[p]
-    outer = gv[p]
-    fe_hat = fe_p + dt * wp.mul(outer, fe_p)
-    AAT     = wp.mul(fe_hat, wp.transpose(fe_hat))
-    theta   = 0.5 * wp.atan2(AAT[0,1] + AAT[1,0], AAT[0,0]-AAT[1,1])
-    cos_theta = wp.cos(theta)
-    sin_theta = wp.sin(theta)
-    U = wp.mat22(cos_theta,
-                 -sin_theta,
-                 sin_theta,
-                 cos_theta)
-    ATA     = wp.mul(wp.transpose(fe_hat), fe_hat)
-    phi     = 0.5 * wp.atan2(ATA[0,1] + ATA[1,0], ATA[0,0]-ATA[1,1])
-    cos_phi = wp.cos(phi)
-    sin_phi = wp.sin(phi)
-    trace_AAT = AAT[0,0] + AAT[1,1]
-    diff_AAT = AAT[0,0] - AAT[1,1]
-    stuff_AAT = wp.sqrt(diff_AAT*diff_AAT + 4.0*AAT[0,1]*AAT[1,0])
-    s = wp.vec2(wp.sqrt(0.5 * (trace_AAT + stuff_AAT)),
-                wp.sqrt(0.5 * (trace_AAT - stuff_AAT)))
-    V = wp.mat22(cos_phi, -sin_phi, sin_phi, cos_phi)
-    C = wp.mul(wp.transpose(U), wp.mul(fe_hat, V))
-    C = wp.mat22(wp.sign(C[0,0]),0.0,0.0,wp.sign(C[1,1]), dtype=wp.float32)
-    V = wp.mul(V, C)
-    s = linalg.clamp_vec2(s, lower_bound, upper_bound)
-    S = wp.diag(s)
-    fe[p] = wp.mul(U, wp.mul(S, wp.transpose(V)))
-    fp[p] = wp.mul(V, wp.mul(wp.inverse(S), wp.mul(wp.transpose(U), f[p])))
+    S = wp.diag(s[p])
+    fe[p] = wp.mul(U[p], wp.mul(S, wp.transpose(V[p])))
+    fp[p] = wp.mul(V[p], wp.mul(wp.inverse(S), wp.mul(wp.transpose(U[p]), f[p])))
+
+
+
+
+def update_deformations(fe: wp.array(dtype=wp.mat22),
+                        fp: wp.array(dtype=wp.mat22),
+                        f: wp.array(dtype=wp.mat22),
+                        gv: wp.array(dtype=wp.mat22),
+                        dt: float,
+                        lower_bound: float,
+                        upper_bound: float,
+                        device="cpu") -> None:
+    num_p = fe.shape[0]
+    wp.launch(kernel=shift_deformation,
+               dim=num_p,
+               inputs=[f, gv, dt],
+               device=device)
+    wp.launch(kernel=shift_deformation,
+               dim=num_p,
+               inputs=[fe, gv, dt],
+               device=device)
+    U = wp.empty_like(fe)
+    s = wp.empty(shape=num_p, dtype=wp.vec2, device=device)
+    V = wp.empty_like(fe)
+    wp.launch(kernel=linalg.array_svd2,
+              dim=num_p,
+              inputs=[fe,U,s,V],
+              device=device)
+    wp.launch(kernel=linalg.array_clamp_vec2,
+              dim=num_p,
+              inputs=[s, lower_bound, upper_bound],
+              device=device)
+    wp.launch(kernel=construct_deformations,
+              dim=num_p,
+              inputs=[fe, fp, f, U, s, V],
+              device=device)

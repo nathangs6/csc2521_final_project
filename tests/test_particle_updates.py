@@ -69,23 +69,26 @@ def test_update_particle_velocity():
     for i in range(len(expected)):
         assert np.linalg.norm(actual[i] - expected[i]) <= TOL
 
-def test_update_particle_F():
+def test_update_deformations():
     f = np.array([
         wp.mat22(1.0, 2.0, 0.3, 0.4),
         wp.mat22(0.1, 0.2, -0.4, 1.0)])
+    FE = wp.array([wp.mat22(0.1,0.0,0.0,2.0),
+                   wp.mat22(2.0,0.0,0.0,2.0)], dtype=wp.mat22)
+    FP = wp.array([wp.mat22(1.0,0.0,0.0,1.0),
+                   wp.mat22(1.0,0.0,0.0,2.0)], dtype=wp.mat22)
     new_vi = wp.array([wp.vec2(0.5,-1.1)], dtype=wp.vec2)
     grad_wpi = wp.array([
         [wp.vec2(1.0,2.0)],
         [wp.vec2(0.3,1.2)]], dtype=wp.vec2, ndim=2)
     gv = wp.zeros(shape=2, dtype=wp.mat22, device="cpu")
     dt = 0.1
+    lower_bound = 1 - 0.1
+    upper_bound = 1 + 0.2
     f = wp.array(f, dtype=wp.mat22, device="cpu")
     mass_check = wp.array([[1],[1]], dtype=wp.int8, ndim=2, device="cpu")
     src.update_grad_velocity(gv, new_vi, grad_wpi, mass_check)
-    wp.launch(kernel=src.update_particle_F,
-              dim=2,
-              inputs=[f, gv, dt],
-              device="cpu")
+    src.update_deformations(FE, FP, f, gv, dt, lower_bound, upper_bound)
     actual = np.array(f)
     expected = [
         np.array([[1080/1000, 2140/1000],[124/1000, 92/1000]]),
@@ -93,7 +96,6 @@ def test_update_particle_F():
     for i in range(len(expected)):
         assert np.linalg.norm(actual[i] - expected[i]) <= TOL
 
-def test_update_particle_FE_FP():
     FE = wp.array([wp.mat22(0.1,0.0,0.0,2.0),
                    wp.mat22(2.0,0.0,0.0,2.0)], dtype=wp.mat22)
     FP = wp.array([wp.mat22(1.0,0.0,0.0,1.0),
@@ -107,16 +109,11 @@ def test_update_particle_FE_FP():
                          [wp.vec2(1.0,2.0), wp.vec2(0.1,0.0), wp.vec2(3.0,2.0)]], dtype=wp.vec2)
     gv = wp.zeros(shape=2, dtype=wp.mat22, device="cpu")
     dt = 0.0 # for simple SVD
-    theta_c = 0.1
-    theta_s = 0.2
     mass_check = wp.array([[1,1],
                            [1,1],
                            [1,1]], dtype=wp.int8, ndim=2, device="cpu")
     src.update_grad_velocity(gv, new_vi, grad_wpi, mass_check)
-    wp.launch(kernel=src.update_particle_FE_FP,
-              dim=2,
-              inputs=[FE, FP, F, gv, dt, 1.0-theta_c, 1.0+theta_s],
-              device="cpu")
+    src.update_deformations(FE, FP, F, gv, dt, lower_bound, upper_bound)
     actual = np.array(FE)
     expected = np.array([
         [[9/10,0],[0,12/10]],

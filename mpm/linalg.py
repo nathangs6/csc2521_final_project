@@ -13,6 +13,14 @@ def clamp_vec2(v: wp.vec2, lower: float, upper: float) -> wp.vec2:
     return wp.vec2(wp.clamp(v[0], lower, upper),
                    wp.clamp(v[1], lower, upper))
 
+@wp.kernel
+def array_clamp_vec2(v: wp.array(dtype=wp.vec2), lower: float, upper: float) -> None:
+    """
+    Clamps all entries of v.
+    """
+    p = wp.tid()
+    v[p] = clamp_vec2(v[p], lower, upper)
+
 @wp.func
 def sum_array_outer(v: wp.array(dtype=wp.vec2), w: wp.array(dtype=wp.vec2)) -> wp.mat22:
     result = wp.mat22(0.0,0.0,0.0,0.0)
@@ -59,6 +67,49 @@ def array_determinant(J: wp.array(dtype=wp.float32),
     """
     tid = wp.tid()
     J[tid] = wp.determinant(F[tid])
+
+@wp.struct
+class SVD2_Struct:
+    U: wp.mat22
+    s: wp.vec2
+    V: wp.mat22
+
+@wp.func
+def svd2(A: wp.mat22) -> SVD2_Struct:
+    result = SVD2_Struct()
+    AAT     = wp.mul(A, wp.transpose(A))
+    theta   = 0.5 * wp.atan2(AAT[0,1] + AAT[1,0], AAT[0,0]-AAT[1,1])
+    cos_theta = wp.cos(theta)
+    sin_theta = wp.sin(theta)
+    result.U = wp.mat22(cos_theta,
+                 -sin_theta,
+                 sin_theta,
+                 cos_theta)
+    ATA     = wp.mul(wp.transpose(A), A)
+    phi     = 0.5 * wp.atan2(ATA[0,1] + ATA[1,0], ATA[0,0]-ATA[1,1])
+    cos_phi = wp.cos(phi)
+    sin_phi = wp.sin(phi)
+    trace_AAT = AAT[0,0] + AAT[1,1]
+    diff_AAT = AAT[0,0] - AAT[1,1]
+    stuff_AAT = wp.sqrt(diff_AAT*diff_AAT + 4.0*AAT[0,1]*AAT[1,0])
+    result.s = wp.vec2(wp.sqrt(0.5 * (trace_AAT + stuff_AAT)),
+                wp.sqrt(0.5 * (trace_AAT - stuff_AAT)))
+    V = wp.mat22(cos_phi, -sin_phi, sin_phi, cos_phi)
+    C = wp.mul(wp.transpose(result.U), wp.mul(A, V))
+    C = wp.mat22(wp.sign(C[0,0]),0.0,0.0,wp.sign(C[1,1]), dtype=wp.float32)
+    result.V = wp.mul(V, C)
+    return result
+
+@wp.kernel
+def array_svd2(A: wp.array(dtype=wp.mat22),
+               U: wp.array(dtype=wp.mat22),
+               s: wp.array(dtype=wp.vec2),
+               V: wp.array(dtype=wp.mat22)) -> None:
+    i = wp.tid()
+    result = svd2(A[i])
+    U[i] = result.U
+    s[i] = result.s
+    V[i] = result.V
 
 @wp.kernel
 def is_positive_1d(output: wp.array(dtype=wp.int8),
