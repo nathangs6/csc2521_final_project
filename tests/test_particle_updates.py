@@ -3,7 +3,7 @@ import sys
 test_directory = os.path.dirname(__file__)
 src_dir = os.path.join(test_directory, '..', 'mpm')
 sys.path.append(src_dir)
-import particle_updates as src
+import particle as src
 import warp as wp
 import numpy as np
 TOL = 0.00001
@@ -58,14 +58,9 @@ def test_update_particle_velocity():
     wpi = wp.array(wpi, dtype=wp.float32, device="cpu")
     vW = wp.zeros_like(vp)
     new_vW = wp.zeros_like(vW)
-    wp.launch(kernel=src.compute_vW,
-              dim=1,
-              inputs=[vW, old_vg, wpi],
-              device="cpu")
-    wp.launch(kernel=src.compute_vW,
-              dim=1,
-              inputs=[new_vW, new_vg, wpi],
-              device="cpu")
+    check = wp.array([[1],[1],[1]], dtype=wp.int8).transpose()
+    src.compute_vW(vW, old_vg, wpi, check)
+    src.compute_vW(new_vW, new_vg, wpi, check)
     wp.launch(kernel=src.update_particle_velocity,
               dim=2,
               inputs=[vp, new_vW, vW, a],
@@ -75,26 +70,26 @@ def test_update_particle_velocity():
     for i in range(len(expected)):
         assert np.linalg.norm(actual[i] - expected[i]) <= TOL
 
-def test_update_particle_F():
+def test_update_deformations():
     f = np.array([
         wp.mat22(1.0, 2.0, 0.3, 0.4),
         wp.mat22(0.1, 0.2, -0.4, 1.0)])
+    FE = wp.array([wp.mat22(0.1,0.0,0.0,2.0),
+                   wp.mat22(2.0,0.0,0.0,2.0)], dtype=wp.mat22)
+    FP = wp.array([wp.mat22(1.0,0.0,0.0,1.0),
+                   wp.mat22(1.0,0.0,0.0,2.0)], dtype=wp.mat22)
     new_vi = wp.array([wp.vec2(0.5,-1.1)], dtype=wp.vec2)
     grad_wpi = wp.array([
         [wp.vec2(1.0,2.0)],
         [wp.vec2(0.3,1.2)]], dtype=wp.vec2, ndim=2)
     gv = wp.zeros(shape=2, dtype=wp.mat22, device="cpu")
     dt = 0.1
+    lower_bound = 1 - 0.1
+    upper_bound = 1 + 0.2
     f = wp.array(f, dtype=wp.mat22, device="cpu")
-    mass = wp.array([1.0], dtype=wp.float32, device="cpu")
-    wp.launch(kernel=src.update_grad_velocity,
-              dim=2,
-              inputs=[gv, new_vi, grad_wpi, mass],
-              device="cpu")
-    wp.launch(kernel=src.update_particle_F,
-              dim=2,
-              inputs=[f, gv, dt],
-              device="cpu")
+    mass_check = wp.array([[1],[1]], dtype=wp.int8, ndim=2, device="cpu")
+    src.update_grad_velocity(gv, new_vi, grad_wpi, mass_check)
+    src.update_deformations(FE, FP, f, gv, dt, lower_bound, upper_bound)
     actual = np.array(f)
     expected = [
         np.array([[1080/1000, 2140/1000],[124/1000, 92/1000]]),
@@ -102,7 +97,6 @@ def test_update_particle_F():
     for i in range(len(expected)):
         assert np.linalg.norm(actual[i] - expected[i]) <= TOL
 
-def test_update_particle_FE_FP():
     FE = wp.array([wp.mat22(0.1,0.0,0.0,2.0),
                    wp.mat22(2.0,0.0,0.0,2.0)], dtype=wp.mat22)
     FP = wp.array([wp.mat22(1.0,0.0,0.0,1.0),
@@ -116,17 +110,11 @@ def test_update_particle_FE_FP():
                          [wp.vec2(1.0,2.0), wp.vec2(0.1,0.0), wp.vec2(3.0,2.0)]], dtype=wp.vec2)
     gv = wp.zeros(shape=2, dtype=wp.mat22, device="cpu")
     dt = 0.0 # for simple SVD
-    theta_c = 0.1
-    theta_s = 0.2
-    mass = wp.array([1.0, 1.0, 1.0], dtype=wp.float32, device="cpu")
-    wp.launch(kernel=src.update_grad_velocity,
-              dim=2,
-              inputs=[gv, new_vi, grad_wpi, mass],
-              device="cpu")
-    wp.launch(kernel=src.update_particle_FE_FP,
-              dim=2,
-              inputs=[FE, FP, F, gv, dt, 1.0-theta_c, 1.0+theta_s],
-              device="cpu")
+    mass_check = wp.array([[1,1],
+                           [1,1],
+                           [1,1]], dtype=wp.int8, ndim=2, device="cpu")
+    src.update_grad_velocity(gv, new_vi, grad_wpi, mass_check)
+    src.update_deformations(FE, FP, F, gv, dt, lower_bound, upper_bound)
     actual = np.array(FE)
     expected = np.array([
         [[9/10,0],[0,12/10]],
@@ -141,4 +129,20 @@ def test_update_particle_FE_FP():
     ])
     for i in range(len(expected)):
         assert np.linalg.norm(actual[i] - expected[i]) <= TOL
+
+def test_get_stresses():
+    wp.init()
+    FE = wp.array([wp.mat22(2.0,0.0,
+                            0.0,1.0)], dtype=wp.mat22)
+    JE = wp.array([2.0], dtype=wp.float32)
+    FP = wp.array([wp.mat22(3.0,0.0,
+                            0.0,1.0)], dtype=wp.mat22)
+    JP = wp.array([3.0], dtype=wp.float32)
+    mu = wp.array([1.0*np.exp(1.0 - 3.0)], dtype=wp.float32)
+    lam = wp.array([1.0*np.exp(1.0 - 3.0)], dtype=wp.float32)
+    stress = wp.empty_like(FE)
+    src.get_stresses(stress, FE, JE, FP, JP, mu, lam)
+    actual = np.array(stress)
+    expected = 2*np.exp(-2) * np.array([[3,0],[0,1]])
+    assert np.linalg.norm(actual - expected) <= TOL
 

@@ -3,30 +3,10 @@ import sys
 test_directory = os.path.dirname(__file__)
 src_dir = os.path.join(test_directory, '..', 'mpm')
 sys.path.append(src_dir)
-import grid_updates as src
+import grid as src
 import warp as wp
 import numpy as np
 TOL = 0.00001
-
-def test_get_stresses():
-    wp.init()
-    FE = wp.array([wp.mat22(2.0,0.0,
-                            0.0,1.0)], dtype=wp.mat22)
-    JE = wp.array([2.0], dtype=wp.float32)
-    FP = wp.array([wp.mat22(3.0,0.0,
-                            0.0,1.0)], dtype=wp.mat22)
-    JP = wp.array([3.0], dtype=wp.float32)
-    mu0 = 1.0
-    lam0 = 1.0
-    zeta = 1.0
-    stress = wp.empty_like(FE)
-    wp.launch(kernel=src.get_stresses,
-              dim=1,
-              inputs=[stress, FE, JE, FP, JP, mu0, lam0, zeta],
-              device="cpu")
-    actual = np.array(stress)
-    expected = 2*np.exp(-2) * np.array([[3,0],[0,1]])
-    assert np.linalg.norm(actual - expected) <= TOL
 
 def test_compute_grid_forces():
     wp.init()
@@ -34,7 +14,7 @@ def test_compute_grid_forces():
     grad_wip = wp.array([[wp.vec2(1.0,2.0), wp.vec2(0.0,1.0)]], dtype=wp.vec2)
     stress = wp.array([wp.mat22(1.0,0.0,0.0,1.0),
                        wp.mat22(2.0,0.0,0.0,2.0)], dtype=wp.mat22)
-    mass = wp.array([1.0, 1.0], dtype=wp.float32)
+    mass = wp.array([1, 1], dtype=wp.int8)
     grid_forces = wp.empty(shape=1, dtype=wp.vec2)
     wp.launch(kernel=src.compute_grid_forces,
               dim=1,
@@ -43,19 +23,6 @@ def test_compute_grid_forces():
     actual = np.array(grid_forces)
     expected = np.array([[-2.0, -10.0]])
     assert np.linalg.norm(actual[0] - expected[0]) <= TOL
-
-def test_add_force():
-    force = wp.zeros(shape=2, dtype=wp.vec2)
-    new_force = wp.vec2(0.0,-10.0)
-    wp.launch(kernel=src.add_force,
-              dim=2,
-              inputs=[force, new_force],
-              device="cpu")
-    actual = np.array(force)
-    expected = np.array([[0.0,-10.0],[0.0,-10.0]])
-    for i in range(len(expected)):
-        assert np.linalg.norm(actual[i] - expected[i]) <= TOL
-
 
 def test_update_grid_velocities_with_ext_forces():
     old_v = wp.array([wp.vec2(1.0,0.0), wp.vec2(0.0,-2.0)], dtype=wp.vec2)

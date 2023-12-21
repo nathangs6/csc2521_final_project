@@ -1,54 +1,20 @@
+"""
+Title: grid.py
+Description: Contains all functions that update grid values.
+"""
 import numpy as np
 import numpy.linalg as npl
 from scipy.linalg import polar
 import warp as wp
 
 @wp.func
-def lame_parameter(c: float, zeta: float, JP: float):
-    return c * wp.exp(zeta * (1.0 - JP))
-
-def lame_parameter_nonwp(c: float, zeta: float, JP: float):
-    return c * wp.exp(zeta * (1.0 - JP))
-
-@wp.func
-def compute_stress(FE: wp.mat22, JE: wp.float32, FP: wp.mat22, JP: wp.float32, mu0: float, lam0: float, zeta: float) -> wp.mat22:
-    mu      = lame_parameter(mu0, zeta, JP)
-    lam     = lame_parameter(lam0, zeta, JP)
-    AAT     = wp.mul(FE, wp.transpose(FE))
-    theta   = 0.5 * wp.atan2(AAT[0,1] + AAT[1,0], AAT[0,0]-AAT[1,1])
-    cos_theta = wp.cos(theta)
-    sin_theta = wp.sin(theta)
-    U = wp.mat22(cos_theta,
-                 -sin_theta,
-                 sin_theta,
-                 cos_theta)
-    ATA     = wp.mul(wp.transpose(FE), FE)
-    phi     = 0.5 * wp.atan2(ATA[0,1] + ATA[1,0], ATA[0,0]-ATA[1,1])
-    cos_phi = wp.cos(phi)
-    sin_phi = wp.sin(phi)
-    V = wp.mat22(cos_phi, -sin_phi, sin_phi, cos_phi)
-    C = wp.mul(wp.transpose(U), wp.mul(FE, V))
-    C = wp.mat22(wp.sign(C[0,0]),0.0,0.0,wp.sign(C[1,1]), dtype=wp.float32)
-    V = wp.mul(V, C)
-    RE      = wp.mul(U, wp.transpose(V))
-    return 2.0*mu*wp.mul(FE-RE, wp.transpose(FE)) + lam*(JE-1.0)*JE*wp.identity(n=2, dtype=wp.float32)
-
-@wp.kernel
-def get_stresses(stress: wp.array(dtype=wp.mat22),
-                 FE: wp.array(dtype=wp.mat22),
-                 JE: wp.array(dtype=wp.float32),
-                 FP: wp.array(dtype=wp.mat22),
-                 JP: wp.array(dtype=wp.float32),
-                 mu0: float,
-                 lam0: float,
-                 zeta: float) -> None:
-    p = wp.tid()
-    stress[p] = compute_stress(FE[p], JE[p], FP[p], JP[p], mu0, lam0, zeta)
-
-@wp.func
 def sum_stresses(volume: wp.array(dtype=wp.float32),
                  stress: wp.array(dtype=wp.mat22),
                  grad_wi: wp.array(dtype=wp.vec2)) -> wp.vec2:
+    """
+    Computes the grid force at an index by summing over all particles.
+    Equation (6) in Stomakhin et al.
+    """
     result = wp.vec2(0.0, 0.0)
     for p in range(volume.shape[0]):
         result += volume[p] * wp.mul(stress[p], grad_wi[p])
@@ -60,20 +26,15 @@ def compute_grid_forces(
     volume:         wp.array(dtype=wp.float32),
     grad_wip:       wp.array(dtype=wp.vec2, ndim=2),
     stress:         wp.array(dtype=wp.mat22),
-    mass:           wp.array(dtype=wp.float32)
+    check:          wp.array(dtype=wp.int8)
 ):
     """
-    Compute the grid forces.
+    Computes the grid forces for all indices.
+    Equation (6) in Stomakhin et al.
     """
     i = wp.tid()
-    if mass[i] > 0:
+    if check[i] > 0:
         grid_forces[i] = -1.0 * sum_stresses(volume, stress, grad_wip[i])
-
-@wp.kernel
-def add_force(force: wp.array(dtype=wp.vec2),
-              new_force: wp.vec2) -> None:
-    i = wp.tid()
-    force[i] = force[i] + new_force
 
 @wp.kernel
 def update_grid_velocities_with_ext_forces(new_v: wp.array(dtype=wp.vec2),
@@ -82,6 +43,11 @@ def update_grid_velocities_with_ext_forces(new_v: wp.array(dtype=wp.vec2),
                                            ext_f: wp.array(dtype=wp.vec2),
                                            gravity: wp.vec2,
                                            dt: float) -> None:
+    """
+    Updates the grid velocities with the grid forces,
+    as well as with gravitational acceleration.
+    Equation 10 in Stomakhin et al., with gravity added.
+    """
     i = wp.tid()
     if mass[i] > 0:
         new_v[i] = old_v[i] + dt * (gravity + ext_f[i] / mass[i])
@@ -90,6 +56,9 @@ def update_grid_velocities_with_ext_forces(new_v: wp.array(dtype=wp.vec2),
 @wp.kernel
 def solve_grid_velocity_explicit(new_v: wp.array(dtype=wp.vec2),
                                  old_v: wp.array(dtype=wp.vec2)) -> None:
+    """
+    Explicit solver for velocity.
+    """
     i = wp.tid()
     new_v[i] = old_v[i]
 
