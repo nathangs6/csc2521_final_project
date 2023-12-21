@@ -16,17 +16,16 @@ save = False
 dt = 1e-5
 implicit=False
 step_per_frame = 30
-num_frames = 100
+num_frames = 750
 radius = 0.05
 
 # Define MPM and Scene
-scene = Scene.BallDrop(h=0.01,dt=dt)
+scene = Scene.RollingBall(h=0.1,dt=dt)
 mpm = MPM(scene)
 mpm.init_animation(device="cpu")
 
 # Make data
 data = [mpm.get_position()]
-print("Number of particles: " + str(mpm.get_position().shape[0]))
 print("Generating data")
 for f in range(num_frames):
     start = time.time()

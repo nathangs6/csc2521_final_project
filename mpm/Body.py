@@ -70,23 +70,23 @@ class Wall(Body):
 
 
 class Plane(Body):
-    def __init__(self, name, mu, v: np.array, n: np.array, x0: np.array, extent: float, is_sticky=False, visualize=True) -> None:
+    def __init__(self, name, mu, v: np.array, extents: np.array, is_sticky=False, visualize=True) -> None:
         """
-        Returns the plane corresponding to the equation:
-            q[0]x + q[1]y + q[2]z + d = 0
+        Returns the line (plane) passing through the points extent[0] and extent[1].
+        Tangent vector is extents[1] - extents[0].
+        Normal vector is a rotation by pi/2.
         """
-        n /= np.linalg.norm(n)
+        t = extents[1] - extents[0]
+        t /= np.linalg.norm(t)
+        a = np.pi/2
+        n = np.array([[np.cos(a), -np.sin(a)],[np.sin(a), np.cos(a)]]) @ t
         def plane_function(p):
-            return np.dot(n, p-x0)
+            return np.dot(n, p-extents[0])
 
         def plane_normal(p):
             return n
-        t1 = np.random.rand(2)
-        t1 -= t1.dot(n) * n
-        t1 /= np.linalg.norm(t1)
         mesh = {
-            "vertices": np.array([x0+extent*t1,
-                                  x0-extent*t1]),
+            "vertices": extents,
             "faces": np.array([[0,1]])
         }
         Body.__init__(self, name, mu, v, plane_function, plane_normal, mesh, is_sticky=is_sticky, visualize=visualize)

@@ -80,7 +80,7 @@ class Scene:
 class BallDrop(Scene):
     def __init__(self, h=0.05, dt=1e-5, density=1e2):
         extents = np.array([[-1.0,1.0],[0.0,1.0]])
-        position, velocity, mass = SnowShapes.make_snowball(0.25, np.array([0.0,0.4]), np.array([0, -9.81]), 0.01, density)
+        position, velocity, mass = SnowShapes.make_snowball(0.25, np.array([0.0,0.4]), np.array([0, -9.81]), 0.05, density)
         bodies=np.array([])
         Scene.__init__(self,
                        spacing=h,
@@ -114,14 +114,36 @@ class BallCrash(Scene):
 
 
 class TwoSnowBallCollide(Scene):
-    def __init__(self, h=1.0, dt=1e-3, density=1e2):
-        extents = np.array([[-5.0, 5.0], [0.0,6.0]])
-        position1, velocity1, mass1 = SnowShapes.make_snowball(1.0, np.array([-2.0, 2.5]), np.array([20.0,0.0]), 1.0, density)
-        position2, velocity2, mass2 = SnowShapes.make_snowball(1.0, np.array([-2.0, 2.5]), np.array([-20.0,0.0]), 1.0, density)
+    def __init__(self, h=0.05, dt=1e-5, density=1e2):
+        extents = np.array([[-2.0, 2.0], [0.0,3.0]])
+        position1, velocity1, mass1 = SnowShapes.make_snowball(0.5, np.array([-1.0, 1.5]), np.array([20.0,0.0]), 0.5, density)
+        position2, velocity2, mass2 = SnowShapes.make_snowball(0.5, np.array([1.0, 2.0]), np.array([-20.0,0.0]), 0.5, density)
         position = np.concatenate((position1, position2), axis=0)
         velocity = np.concatenate((velocity1, velocity2), axis=0)
         mass = np.concatenate((mass1, mass2), axis=0)
         bodies = np.array([])
+        Scene.__init__(self,
+                       spacing=h,
+                       dt=dt,
+                       density=density,
+                       extents=extents,
+                       mass=mass,
+                       position=position,
+                       velocity=velocity,
+                       bodies=bodies)
+
+class RollingBall(Scene):
+    def __init__(self, h=0.1, dt=1e-5, density=1e2):
+        extents=np.array([[-2.0,2.0],[0.0,4.0]])
+        offset = 0.1
+        c = np.array([[-2.0,3.1],[2.0,0.1],[2.0,0.0],[-2.0,3.0]])
+        position1, velocity1, mass1 = SnowShapes.make_snowball(0.25, np.array([-1.5, 3.5]), np.array([0.0,-10.0]), 0.05, density)
+        position2, velocity2, mass2 = SnowShapes.make_snow_quad(c=c, velocity=np.array([0.0,0.0]), mass=0.05, density=density)
+        position = np.concatenate((position1, position2), axis=0)
+        velocity = np.concatenate((velocity1, velocity2), axis=0)
+        mass = np.concatenate((mass1, mass2), axis=0)
+        body = Plane("ramp", mu=0.1, v=np.array([0.0,0.0]), extents=np.array([[-2.0,3.0], [2.0,0.0]]))
+        bodies = np.array([body])
         Scene.__init__(self,
                        spacing=h,
                        dt=dt,

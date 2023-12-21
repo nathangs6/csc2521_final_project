@@ -46,8 +46,6 @@ class MPM:
             "density": np.empty(shape=self.num_p, dtype=np.float32),
             "position": scene.position,
             "velocity": scene.velocity,
-            "grad_velocity": np.zeros(shape=(self.num_p,2,2), dtype=np.float32),
-            "viWi": np.zeros(shape=(self.num_p,2), dtype=np.float32),
             "F": np.zeros(shape=(self.num_p,2,2), dtype=np.float32),
             "J": np.ones(shape=self.num_p, dtype=np.float32),
             "FE": np.zeros(shape=(self.num_p,2,2), dtype=np.float32),
@@ -91,8 +89,6 @@ class MPM:
         self.pp["density"] = wp.array(self.pp["density"], dtype=wp.float32, device=device)
         self.pp["position"] = wp.array(self.pp["position"], dtype=wp.vec2, device=device)
         self.pp["velocity"] = wp.array(self.pp["velocity"], dtype=wp.vec2, device=device)
-        self.pp["grad_velocity"] = wp.array(self.pp["grad_velocity"], dtype=wp.mat22, device=device)
-        self.pp["viWi"] = wp.array(self.pp["viWi"], dtype=wp.vec2, device=device)
         self.pp["F"] = wp.array(self.pp["F"], dtype=wp.mat22, device=device)
         self.pp["FE"] = wp.array(self.pp["FE"], dtype=wp.mat22, device=device)
         self.pp["JE"] = wp.array(self.pp["JE"], dtype=wp.float32, device=device)
@@ -163,12 +159,13 @@ class MPM:
 
         # Step 3: compute grid forces
         ## Compute shifted elastic deformation
-        particle.update_grad_velocity(self.pp["grad_velocity"], self.gp["velocity"], self.interp["gwip"].transpose(), wip_check.transpose())
+        grad_velocity = wp.empty_like(self.pp["F"])
+        particle.update_grad_velocity(grad_velocity, self.gp["velocity"], self.interp["gwip"].transpose(), wip_check.transpose())
         fe_shifted = wp.zeros_like(self.pp["FE"])
         wp.copy(fe_shifted, self.pp["FE"])
         wp.launch(kernel=particle.shift_deformation,
                   dim=self.num_p,
-                  inputs=[fe_shifted, self.pp["grad_velocity"], self.p["dt"]],
+                  inputs=[fe_shifted, grad_velocity, self.p["dt"]],
                   device=device)
         je_shifted = wp.zeros_like(self.pp["JE"], device=device)
         wp.launch(kernel=linalg.array_determinant,
@@ -226,11 +223,11 @@ class MPM:
 
         # Step 7: update deformation gradient
         ## Update matrices
-        particle.update_grad_velocity(self.pp["grad_velocity"], new_vg, self.interp["gwip"].transpose(), wip_check.transpose())
+        particle.update_grad_velocity(grad_velocity, new_vg, self.interp["gwip"].transpose(), wip_check.transpose())
         particle.update_deformations(self.pp["FE"],
                                              self.pp["FP"],
                                              self.pp["F"],
-                                             self.pp["grad_velocity"],
+                                             grad_velocity,
                                              self.p["dt"],
                                              self.p["lb"],
                                              self.p["ub"],
@@ -246,15 +243,14 @@ class MPM:
                   device=device)
 
         # Step 8: update particle velocities
-        if self.frame == 0:
-            particle.compute_vW(self.pp["viWi"], self.gp["velocity"], self.interp["wip"].transpose(), wip_check.transpose())
-        new_viWi = wp.zeros_like(self.pp["viWi"])
+        old_viWi = wp.zeros_like(self.pp["velocity"])
+        new_viWi = wp.zeros_like(self.pp["velocity"])
+        particle.compute_vW(old_viWi, self.gp["velocity"], self.interp["wip"].transpose(), wip_check.transpose())
         particle.compute_vW(new_viWi, new_vg, self.interp["wip"].transpose(), wip_check.transpose())
         wp.launch(kernel=particle.update_particle_velocity,
                   dim=self.num_p,
-                  inputs=[self.pp["velocity"], new_viWi, self.pp["viWi"], self.p["alpha"]],
+                  inputs=[self.pp["velocity"], new_viWi, old_viWi, self.p["alpha"]],
                   device=device)
-        self.pp["viWi"] = new_viWi
 
         # Step 9: particle-based body collisions
         particle_positions = self.pp["position"].numpy()
