@@ -78,9 +78,9 @@ class Scene:
 
 
 class BallDrop(Scene):
-    def __init__(self, h=0.05, dt=1e-4, density=1e2):
-        extents = np.array([[-1.5,1.5],[0.0,2.0]])
-        position, velocity, mass = SnowShapes.make_snowball(0.25, np.array([0.0,1.2]), np.array([0, -80.0]), 0.01, density)
+    def __init__(self, h=0.05, dt=1e-5, density=1e2):
+        extents = np.array([[-1.0,1.0],[0.0,1.0]])
+        position, velocity, mass = SnowShapes.make_snowball(0.25, np.array([0.0,0.4]), np.array([0, -9.81]), 0.01, density)
         bodies=np.array([])
         Scene.__init__(self,
                        spacing=h,

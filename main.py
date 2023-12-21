@@ -20,7 +20,7 @@ num_frames = 100
 radius = 0.05
 
 # Define MPM and Scene
-scene = Scene.BallDrop(h=0.1,dt=dt)
+scene = Scene.BallDrop(h=0.01,dt=dt)
 mpm = MPM(scene)
 mpm.init_animation(device="cpu")
 

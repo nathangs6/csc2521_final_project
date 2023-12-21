@@ -17,8 +17,8 @@ def compute_collision(p: np.array, v: np.array, body: Body, apply_bounce: bool) 
         vrel = np.array([0.0,0.0])
     else:
         vrel = vt + mu*vn*vt/npl.norm(vt)
-        if apply_bounce:
-            vrel = vrel - vn*n
+    if apply_bounce:
+        vrel = vrel - vn*n
     return vrel + vco
 
 def handle_grid_collisions(x: np.array, v: np.array, dt: float, bodies: np.array, grid_masses) -> np.array:

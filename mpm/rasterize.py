@@ -37,7 +37,10 @@ def construct_interpolations(wip: wp.array(dtype=float, ndim=2), wip_grad: wp.ar
     N0 = N(z0)
     N1 = N(z1)
     wip[a,b] = N0 * N1
-    wip_grad[a,b] = wp.vec2(dN(z0) * N1 / h, N0 * dN(z1) / h)
+    if wip[a,b] > 0.00001:
+        wip_grad[a,b] = wp.vec2(dN(z0) * N1 / h, N0 * dN(z1) / h)
+    else:
+        wip_grad[a,b] = wp.vec2(0.0,0.0)
 
 @wp.kernel
 def init_cell_density(cd: wp.array(dtype=wp.float32),
@@ -67,18 +70,21 @@ def init_particle_volume(v: wp.array(dtype=wp.float32),
 
 @wp.func
 def sum_points_m(m: wp.array(dtype=wp.float32),
-                 wi: wp.array(dtype=wp.float32)) -> wp.float32:
+                 wi: wp.array(dtype=wp.float32),
+                 wi_check: wp.array(dtype=wp.int8)) -> wp.float32:
     result = float(0.0)
     for p in range(m.shape[0]):
-        result += m[p] * wi[p]
+        if wi_check[p] > 0:
+            result += m[p] * wi[p]
     return result
 
 @wp.kernel
-def rasterize_mass(m_p: wp.array(dtype=wp.float32),
+def rasterize_mass(m_g: wp.array(dtype=wp.float32),
+                   m_p: wp.array(dtype=wp.float32),
                    wip: wp.array(dtype=wp.float32, ndim=2),
-                   m_g: wp.array(dtype=wp.float32)) -> None:
+                   wip_check: wp.array(dtype=wp.int8, ndim=2)) -> None:
     i = wp.tid()
-    m_g[i] = sum_points_m(m_p, wip[i])
+    m_g[i] = sum_points_m(m_p, wip[i], wip_check[i])
 
 
 @wp.func
@@ -91,11 +97,11 @@ def sum_points_v(m: wp.array(dtype=wp.float32),
     return result
 
 @wp.kernel
-def rasterize_velocity(m_p: wp.array(dtype=wp.float32),
-                       v_p: wp.array(dtype=wp.vec2),
-                       wip: wp.array(dtype=wp.float32, ndim=2),
+def rasterize_velocity(v_g: wp.array(dtype=wp.vec2),
                        m_g: wp.array(dtype=wp.float32),
-                       v_g: wp.array(dtype=wp.vec2)) -> None:
+                       v_p: wp.array(dtype=wp.vec2),
+                       m_p: wp.array(dtype=wp.float32),
+                       wip: wp.array(dtype=wp.float32, ndim=2)) -> None:
     i = wp.tid()
     if m_g[i] > 0:
         v_g[i] = sum_points_v(m_p, v_p, wip[i]) / m_g[i]

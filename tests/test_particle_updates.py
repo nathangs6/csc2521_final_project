@@ -58,8 +58,9 @@ def test_update_particle_velocity():
     wpi = wp.array(wpi, dtype=wp.float32, device="cpu")
     vW = wp.zeros_like(vp)
     new_vW = wp.zeros_like(vW)
-    src.compute_vW(vW, old_vg, wpi)
-    src.compute_vW(new_vW, new_vg, wpi)
+    check = wp.array([[1],[1],[1]], dtype=wp.int8).transpose()
+    src.compute_vW(vW, old_vg, wpi, check)
+    src.compute_vW(new_vW, new_vg, wpi, check)
     wp.launch(kernel=src.update_particle_velocity,
               dim=2,
               inputs=[vp, new_vW, vW, a],

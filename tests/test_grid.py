@@ -24,19 +24,6 @@ def test_compute_grid_forces():
     expected = np.array([[-2.0, -10.0]])
     assert np.linalg.norm(actual[0] - expected[0]) <= TOL
 
-def test_add_force():
-    force = wp.zeros(shape=2, dtype=wp.vec2)
-    new_force = wp.vec2(0.0,-10.0)
-    wp.launch(kernel=src.add_force,
-              dim=2,
-              inputs=[force, new_force],
-              device="cpu")
-    actual = np.array(force)
-    expected = np.array([[0.0,-10.0],[0.0,-10.0]])
-    for i in range(len(expected)):
-        assert np.linalg.norm(actual[i] - expected[i]) <= TOL
-
-
 def test_update_grid_velocities_with_ext_forces():
     old_v = wp.array([wp.vec2(1.0,0.0), wp.vec2(0.0,-2.0)], dtype=wp.vec2)
     mass = wp.array([1.0,2.0], dtype=wp.float32)

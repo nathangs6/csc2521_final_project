@@ -1,3 +1,7 @@
+"""
+Title: grid.py
+Description: Contains all functions that update grid values.
+"""
 import numpy as np
 import numpy.linalg as npl
 from scipy.linalg import polar
@@ -7,6 +11,10 @@ import warp as wp
 def sum_stresses(volume: wp.array(dtype=wp.float32),
                  stress: wp.array(dtype=wp.mat22),
                  grad_wi: wp.array(dtype=wp.vec2)) -> wp.vec2:
+    """
+    Computes the grid force at an index by summing over all particles.
+    Equation (6) in Stomakhin et al.
+    """
     result = wp.vec2(0.0, 0.0)
     for p in range(volume.shape[0]):
         result += volume[p] * wp.mul(stress[p], grad_wi[p])
@@ -21,17 +29,12 @@ def compute_grid_forces(
     check:          wp.array(dtype=wp.int8)
 ):
     """
-    Compute the grid forces.
+    Computes the grid forces for all indices.
+    Equation (6) in Stomakhin et al.
     """
     i = wp.tid()
     if check[i] > 0:
         grid_forces[i] = -1.0 * sum_stresses(volume, stress, grad_wip[i])
-
-@wp.kernel
-def add_force(force: wp.array(dtype=wp.vec2),
-              new_force: wp.vec2) -> None:
-    i = wp.tid()
-    force[i] = force[i] + new_force
 
 @wp.kernel
 def update_grid_velocities_with_ext_forces(new_v: wp.array(dtype=wp.vec2),
@@ -40,6 +43,11 @@ def update_grid_velocities_with_ext_forces(new_v: wp.array(dtype=wp.vec2),
                                            ext_f: wp.array(dtype=wp.vec2),
                                            gravity: wp.vec2,
                                            dt: float) -> None:
+    """
+    Updates the grid velocities with the grid forces,
+    as well as with gravitational acceleration.
+    Equation 10 in Stomakhin et al., with gravity added.
+    """
     i = wp.tid()
     if mass[i] > 0:
         new_v[i] = old_v[i] + dt * (gravity + ext_f[i] / mass[i])
@@ -48,6 +56,9 @@ def update_grid_velocities_with_ext_forces(new_v: wp.array(dtype=wp.vec2),
 @wp.kernel
 def solve_grid_velocity_explicit(new_v: wp.array(dtype=wp.vec2),
                                  old_v: wp.array(dtype=wp.vec2)) -> None:
+    """
+    Explicit solver for velocity.
+    """
     i = wp.tid()
     new_v[i] = old_v[i]
 

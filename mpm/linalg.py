@@ -52,12 +52,28 @@ def cw_sum_scalar_vector(a: wp.array(dtype=wp.float32), v: wp.array(dtype=wp.vec
         result += a[i] * v[i]
     return result
 
+@wp.func
+def cw_sum_scalar_vector_if(a: wp.array(dtype=wp.float32), v: wp.array(dtype=wp.vec2), check: wp.array(dtype=wp.int8)) -> wp.vec2:
+    result = wp.vec2(0.0,0.0)
+    for i in range(a.shape[0]):
+        if check[i] > 0:
+            result += a[i] * v[i]
+    return result
+
 @wp.kernel
 def array_cw_sum_scalar_vector(output: wp.array(dtype=wp.vec2),
                                v: wp.array(dtype=wp.vec2),
                                A: wp.array(dtype=wp.float32, ndim=2)) -> None:
     p = wp.tid()
     output[p] = cw_sum_scalar_vector(A[p], v)
+
+@wp.kernel
+def array_cw_sum_scalar_vector_if(output: wp.array(dtype=wp.vec2),
+                               v: wp.array(dtype=wp.vec2),
+                               A: wp.array(dtype=wp.float32, ndim=2),
+                               check: wp.array(dtype=wp.int8, ndim=2)) -> None:
+    p = wp.tid()
+    output[p] = cw_sum_scalar_vector_if(A[p], v, check[p])
 
 @wp.kernel
 def array_determinant(J: wp.array(dtype=wp.float32),

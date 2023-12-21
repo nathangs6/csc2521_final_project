@@ -81,6 +81,8 @@ class MPM:
     def init_animation(self, implicit=False, device="cpu"):
         wp.init()
         self.move_to_device(device=device)
+        print("Number of particles:", self.num_p)
+        print("Number of grid indices:", self.num_g)
 
     def move_to_device(self, device="cpu"):
         # Move particle properties
@@ -118,36 +120,34 @@ class MPM:
         # Step 0: reset scratchpad
         self.reset_scratchpad(device=device)
         # Step 1: rasterize particle data to the grid
-        #start = time.time()
-        ## Update values
+        ## Construct interpolation and the wip check
         wp.launch(kernel=rasterize.construct_interpolations,
                   dim=[self.num_g, self.num_p],
                   inputs=[self.interp["wip"], self.interp["gwip"], self.gp["position"], self.pp["position"], self.p["h"]],
-                  device=device)
-        wp.launch(kernel=rasterize.rasterize_mass,
-                  dim=self.num_g,
-                  inputs=[self.pp["mass"], self.interp["wip"], self.gp["mass"]],
-                  device=device)
-        wp.launch(kernel=rasterize.rasterize_velocity,
-                  dim=self.num_g,
-                  inputs=[self.pp["mass"], self.pp["velocity"], self.interp["wip"], self.gp["mass"], self.gp["velocity"]],
-                  device=device)
-        ## Make checks
-        mass_check = wp.empty(shape=self.num_g, dtype=wp.int8, device=device)
-        wp.launch(kernel=linalg.is_positive_1d,
-                  dim=self.num_g,
-                  inputs=[mass_check, self.gp["mass"]],
                   device=device)
         wip_check = wp.empty(shape=(self.num_g, self.num_p), dtype=wp.int8, device=device)
         wp.launch(kernel=linalg.is_positive_2d,
                   dim=[self.num_g, self.num_p],
                   inputs=[wip_check, self.interp["wip"]],
                   device=device)
-        #print("Step 1 took " + str(time.time() - start) + " to run")
+        ## Rasterize mass and its check
+        wp.launch(kernel=rasterize.rasterize_mass,
+                  dim=self.num_g,
+                  inputs=[self.gp["mass"], self.pp["mass"], self.interp["wip"], wip_check],
+                  device=device)
+        mass_check = wp.empty(shape=self.num_g, dtype=wp.int8, device=device)
+        wp.launch(kernel=linalg.is_positive_1d,
+                  dim=self.num_g,
+                  inputs=[mass_check, self.gp["mass"]],
+                  device=device)
+        ## Rasterize velocity
+        wp.launch(kernel=rasterize.rasterize_velocity,
+                  dim=self.num_g,
+                  inputs=[self.gp["velocity"], self.gp["mass"], self.pp["velocity"], self.pp["mass"], self.interp["wip"]],
+                  device=device)
 
         # Step 2: compute particle volumes and densities
         if self.frame == 0:
-            #start = time.time()
             wp.launch(kernel=rasterize.init_cell_density,
                       dim=self.num_g,
                       inputs=[self.gp["density"], self.gp["mass"], self.p["h"]],
@@ -160,10 +160,8 @@ class MPM:
                       dim=self.num_p,
                       inputs=[self.pp["volume"], self.pp["mass"], self.pp["density"]],
                       device=device)
-            #print("Step 2 took " + str(time.time() - start) + " to run")
 
         # Step 3: compute grid forces
-        #start = time.time()
         ## Compute shifted elastic deformation
         particle.update_grad_velocity(self.pp["grad_velocity"], self.gp["velocity"], self.interp["gwip"].transpose(), wip_check.transpose())
         fe_shifted = wp.zeros_like(self.pp["FE"])
@@ -190,28 +188,21 @@ class MPM:
                   dim=self.num_g,
                   inputs=[grid_forces, self.pp["volume"], self.interp["gwip"], stresses, mass_check],
                   device=device)
-        #print("Step 3 took " + str(time.time() - start) + " to run")
 
         # Step 4: update velocities on grid
-        #start = time.time()
         vg_temp = wp.zeros_like(self.gp["velocity"])
         wp.launch(kernel=grid.update_grid_velocities_with_ext_forces,
                   dim=self.num_g,
                   inputs=[vg_temp, self.gp["velocity"], self.gp["mass"], grid_forces, wp.vec2(0.0,-9.81), self.p["dt"]],
                   device=device)
-        #print("Step 4 took " + str(time.time() - start) + " to run")
 
         # Step 5: handle grid-based body collisions
-        #start = time.time()
-        ## Put necessary resources onto CPU
         grid_coords = self.p["h"] * self.gp["position"].numpy()
         grid_masses = self.gp["mass"].numpy()
         velocities = vg_temp.numpy()
         velocities = handle_collisions.handle_grid_collisions(grid_coords, velocities,  self.p["dt"], self.bodies, grid_masses)
-        #print("Step 5 took " + str(time.time() - start) + " to run")
 
         # Step 6: solve the linear system
-        #start = time.time()
         if not implicit:
             vg_temp = wp.array(velocities, dtype=wp.vec2, device=device)
             new_vg = wp.zeros_like(vg_temp, device=device)
@@ -232,10 +223,8 @@ class MPM:
                                                       self.p["lam0"],
                                                       self.p["zeta"])
             new_vg = wp.array(velocities, dtype=wp.vec2, device=device)
-        #print("Step 6 took " + str(time.time() - start) + " to run")
 
         # Step 7: update deformation gradient
-        #start = time.time()
         ## Update matrices
         particle.update_grad_velocity(self.pp["grad_velocity"], new_vg, self.interp["gwip"].transpose(), wip_check.transpose())
         particle.update_deformations(self.pp["FE"],
@@ -255,37 +244,29 @@ class MPM:
                   dim=self.num_p,
                   inputs=[self.pp["JP"], self.pp["FP"]],
                   device=device)
-        #print(max(np.array(self.pp["JE"])), max(np.array(self.pp["JP"])))
-        #print("Step 7 took " + str(time.time() - start) + " to run")
 
         # Step 8: update particle velocities
-        #start = time.time()
         if self.frame == 0:
-            particle.compute_vW(self.pp["viWi"], self.gp["velocity"], self.interp["wip"].transpose())
+            particle.compute_vW(self.pp["viWi"], self.gp["velocity"], self.interp["wip"].transpose(), wip_check.transpose())
         new_viWi = wp.zeros_like(self.pp["viWi"])
-        particle.compute_vW(new_viWi, new_vg, self.interp["wip"].transpose())
+        particle.compute_vW(new_viWi, new_vg, self.interp["wip"].transpose(), wip_check.transpose())
         wp.launch(kernel=particle.update_particle_velocity,
                   dim=self.num_p,
                   inputs=[self.pp["velocity"], new_viWi, self.pp["viWi"], self.p["alpha"]],
                   device=device)
         self.pp["viWi"] = new_viWi
-        #print("Step 8 took " + str(time.time() - start) + " to run")
 
         # Step 9: particle-based body collisions
-        #start = time.time()
         particle_positions = self.pp["position"].numpy()
         particle_velocities = self.pp["velocity"].numpy()
         new_vp = handle_collisions.handle_particle_collisions(particle_positions, particle_velocities, self.p["dt"], self.bodies)
         self.pp["velocity"] = wp.array(new_vp, dtype=wp.vec2, device=device)
-        #print("Step 9 took " + str(time.time() - start) + " to run")
 
         # Step 10: update particle positions
-        #start = time.time()
         wp.launch(kernel=particle.update_particle_position,
                   dim=self.num_p,
                   inputs=[self.pp["position"], self.pp["velocity"], self.p["dt"]],
                   device=device)
-        #print("Step 10 took " + str(time.time() - start) + " to run")
 
         # Clean up
         self.frame += 1

@@ -21,6 +21,8 @@ def update_particle_velocity(vp: wp.array(dtype=wp.vec2),
                              a: float) -> None:
     """
     Update particle velocities using the grid velocities.
+    This is a sped up formulation of the PIC/FLIP scheme.
+    Essentially, v = (1-a)*v_PIC + a*v_FLIP
     """
     p = wp.tid()
     vp[p] = new_viWi[p] + a*(vp[p] - viWi[p])
@@ -28,16 +30,23 @@ def update_particle_velocity(vp: wp.array(dtype=wp.vec2),
 
 def compute_vW(vW: wp.array(dtype=wp.vec2),
                vg: wp.array(dtype=wp.vec2),
-               wpi: wp.array(dtype=wp.float32, ndim=2)) -> None:
-    wp.launch(kernel=linalg.array_cw_sum_scalar_vector,
+               wpi: wp.array(dtype=wp.float32, ndim=2),
+               wpi_check: wp.array(dtype=wp.int8, ndim=2)) -> None:
+    """
+    Computes the useful intermediary values sum(vg * wp).
+    """
+    wp.launch(kernel=linalg.array_cw_sum_scalar_vector_if,
               dim=vW.shape[0],
-              inputs=[vW, vg, wpi],
+              inputs=[vW, vg, wpi, wpi_check],
               device="cpu")
 
 def update_grad_velocity(gv: wp.array(dtype=wp.mat22),
                          vi: wp.array(dtype=wp.vec2),
                          grad_wpi: wp.array(dtype=wp.vec2, ndim=2),
                          check: wp.array(dtype=wp.int8, ndim=2)) -> None:
+    """
+    Computes the useful intermediary values of grad(v_p^n+1).
+    """
     wp.launch(kernel=linalg.array_sum_array_outer_if,
               dim=gv.shape[0],
               inputs=[gv,vi,grad_wpi,check],
@@ -47,6 +56,9 @@ def update_grad_velocity(gv: wp.array(dtype=wp.mat22),
 def shift_deformation(f: wp.array(dtype=wp.mat22),
                       gv: wp.array(dtype=wp.mat22),
                       dt: float) -> None:
+    """
+    Shifts f with the matrix gv and the coefficient dt.
+    """
     p = wp.tid()
     f[p] = f[p] + dt * wp.mul(gv[p], f[p])
 
@@ -57,6 +69,9 @@ def construct_deformations(fe: wp.array(dtype=wp.mat22),
                            U: wp.array(dtype=wp.mat22),
                            s: wp.array(dtype=wp.vec2),
                            V: wp.array(dtype=wp.mat22)) -> None:
+    """
+    Constructs the updated elastic and plastic deformations.
+    """
     p = wp.tid()
     S = wp.diag(s[p])
     fe[p] = wp.mul(U[p], wp.mul(S, wp.transpose(V[p])))
@@ -73,6 +88,9 @@ def update_deformations(fe: wp.array(dtype=wp.mat22),
                         lower_bound: float,
                         upper_bound: float,
                         device="cpu") -> None:
+    """
+    Updates the total, elastic, and plastic deformations.
+    """
     num_p = fe.shape[0]
     wp.launch(kernel=shift_deformation,
                dim=num_p,
@@ -98,10 +116,6 @@ def update_deformations(fe: wp.array(dtype=wp.mat22),
               inputs=[fe, fp, f, U, s, V],
               device=device)
 
-@wp.func
-def lame_parameter(c: float, zeta: float, JP: float):
-    return c * wp.exp(zeta * (1.0 - JP))
-
 @wp.kernel
 def construct_lame(mu: wp.array(dtype=wp.float32),
                    lam: wp.array(dtype=wp.float32),
@@ -109,6 +123,9 @@ def construct_lame(mu: wp.array(dtype=wp.float32),
                    mu0: float,
                    lam0: float,
                    zeta: float) -> None:
+    """
+    Constructs the two lame parameters mu and lambda.
+    """
     p = wp.tid()
     x = wp.exp(zeta * (1.0 - JP[p]))
     mu[p] = mu0 * x
