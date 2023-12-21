@@ -20,7 +20,7 @@ num_frames = 750
 radius = 0.05
 
 # Define MPM and Scene
-scene = Scene.RollingBall(h=0.1,dt=dt)
+scene = Scene.RollingBall(h=0.05,dt=dt)
 mpm = MPM(scene)
 mpm.init_animation(device="cpu")
 
