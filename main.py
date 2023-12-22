@@ -12,15 +12,20 @@ import matplotlib.animation as animation
 import time
 
 # Set Parameters
-save = False
-dt = 1e-5
-implicit=False
 step_per_frame = 30
 num_frames = 750
-radius = 0.05
 
-# Define MPM and Scene
-scene = Scene.RollingBall(h=0.05,dt=dt)
+scene_selection = ""
+while scene_selection not in ["a","b","c","d"]:
+    scene_selection = input("Scene selection\n(a) Snowball drop\n(b) Snowball crash\n(c) Snowball collision\n(d) Snowball on a ramp\nEnter choice: ")
+if scene_selection == "a":
+    scene = Scene.BallDrop()
+elif scene_selection == "b":
+    scene = Scene.BallCrash()
+elif scene_selection == "c":
+    scene = Scene.TwoSnowBallCollide()
+else:
+    scene = Scene.RollingBall()
 mpm = MPM(scene)
 mpm.init_animation(device="cpu")
 
@@ -30,7 +35,7 @@ print("Generating data")
 for f in range(num_frames):
     start = time.time()
     for i in range(step_per_frame):
-        mpm.step(implicit=implicit)
+        mpm.step()
     data.append(mpm.get_position())
     print("Frame " + str(f) + " took " + str(round(time.time() - start,2)) + " seconds to run")
 

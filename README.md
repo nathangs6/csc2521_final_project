@@ -21,6 +21,7 @@ To setup the project, do the following:
 2. Setup a python virtual environment, `python -m venv env`
 3. Activate python virtual environment, `source env/bin/activate`
 4. Install requirements, `python -m pip install -r requirements.txt`
+5. Run `main.py`
 
 ## Future Improvements
 * Finalize implementation of the implicit solver.

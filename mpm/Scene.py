@@ -78,7 +78,7 @@ class Scene:
 
 
 class BallDrop(Scene):
-    def __init__(self, h=0.05, dt=1e-5, density=1e2):
+    def __init__(self, h=0.025, dt=1e-5, density=1e2):
         extents = np.array([[-1.0,1.0],[0.0,1.0]])
         position, velocity, mass = SnowShapes.make_snowball(0.25, np.array([0.0,0.4]), np.array([0, -9.81]), 0.05, density)
         bodies=np.array([])
@@ -95,7 +95,7 @@ class BallDrop(Scene):
 
 
 class BallCrash(Scene):
-    def __init__(self, h=0.1, dt=1e-3, density=1e2):
+    def __init__(self, h=0.016, dt=1e-5, density=1e2):
         extents = np.array([[-2.0,2.0],[0.0,4.1]])
         position, velocity, mass = SnowShapes.make_snowball(0.5, np.array([0.0,3.0]), np.array([0, -40.0]), 0.1, density)
         body = Box("box", mu=0.01, v=np.array([0.0,0.0]),
@@ -133,7 +133,7 @@ class TwoSnowBallCollide(Scene):
                        bodies=bodies)
 
 class RollingBall(Scene):
-    def __init__(self, h=0.1, dt=1e-5, density=1e2):
+    def __init__(self, h=0.05, dt=1e-5, density=1e2):
         extents=np.array([[-2.0,2.0],[0.0,4.0]])
         offset = 0.1
         c = np.array([[-2.0,3.1],[2.0,0.1],[2.0,0.0],[-2.0,3.0]])
